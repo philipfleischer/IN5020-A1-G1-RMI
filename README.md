@@ -45,7 +45,7 @@ Philip Elias Fleischer: philipef@uio.no
 
 : anwarahe@uio.no
 
-: haakgull@uio.no
+Håkon Gulliksrud: haakgull@uio.no
 
 : matande@uio.no
 

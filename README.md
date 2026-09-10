@@ -3,54 +3,55 @@
 Assignment 1, IN5020 Group 1 — **The Java-RMI International Statistics Service**.
 
 This repo holds the **project skeleton** so the four of us can start our parts in parallel
-without setting up the plumbing first. It is exactly the Maven + RMI starter from the group
-session presentation (`docs/assignment/Java RMI.pptx`, slides 5–10) — the `Add(a, b)` demo —
-nothing from the assignment itself is implemented yet.
+without setting up the plumbing first. This is the Maven and RMI starter pack from the group
+session presentation and the Add(a, b) demo.
+
+**Nothing** from the assignment itself is implemented yet!
 
 ## Structure
 
 ```
-pom.xml                          Maven project — groupId com.ass1 / artifactId solution / Java 17
+pom.xml                          Maven project -> groupId com.ass1 / Java 17
 src/main/java/com/ass1/
-  Main.java                      Hello-world entry point (from the tutorial project)
-  server/ServerInterface.java    RMI remote interface        (presentation slide 6)
-  server/Server.java             RMI server + rmiregistry    (presentation slide 7)
-  client/Client.java             RMI client                  (presentation slide 8)
-src/main/resources/              (empty — Maven layout)
-src/test/java/                   (empty — put JUnit tests here)
+  Main.java                      From the tutorial project
+  server/ServerInterface.java    RMI remote interface
+  server/Server.java             RMI server + rmiregistry
+  client/Client.java             RMI client
+src/main/resources/              (empty)
+src/test/java/                   (empty)
 
-data/exercise_1_dataset.csv      Course dataset, 140 574 cities  (semicolon-separated)
-input/exercise_1_input.txt       Course client input file, 3 165 queries
-docs/assignment/                 Original hand-out: task PDF/DOCX, presentation, zone figure,
-                                 and the untouched tutorial starter (Ass1Tutorial.zip)
+data/exercise_1_dataset.csv      Course dataset
+input/exercise_1_input.txt       Course client input file
+docs/assignment/                 Original hand-out: task PDF/DOCX, presentation...
 ```
 
-## Build & run (verified working — prints `30`)
+## Build & run
 
 ```bash
+# 1)
 mvn compile
 
-# start the RMI registry from the compiled classes, then the server and client
+# 2) start the RMI registry, then the server and client
 cd target/classes && rmiregistry &
 java -cp target/classes com.ass1.server.Server &
-java -cp target/classes com.ass1.client.Client        # -> 30
-
-# optional jar:  mvn package   (add the shade/assembly plugin first if you want a fat jar)
+java -cp target/classes com.ass1.client.Client
 ```
 
-Toolchain used: **JDK 17**, **Maven 3.9**, **Docker** (Docker Desktop — start the app before
-building images).
+Toolchain used: **JDK 17**, **Maven 3.9**, **Docker**.
 
-## Workload split (assignment, "Recommendation for splitting the workload")
+## Workload split
 
-| Member | Responsibility | Where the code goes |
-|--------|----------------|---------------------|
-| 1 | Client + Proxy (load-balancing) server | `com.ass1.client`, new `com.ass1.proxy` |
-| 2 | Processing server + queue technique | `com.ass1.server` |
-| 3 | Cache technique (server-side + client-side) | new `com.ass1.server.cache`, `com.ass1.client.cache` |
-| 4 | Docker / Container | new `Dockerfile`, `docker-compose.yml` (repo root) |
+Member -> Responsibility -> Where the code goes
 
-Agree on the shared RMI interfaces and the query/result data classes together **before**
-splitting up, so everyone codes against the same contract.
+**Name_1** -> Client and Proxy server -> com.ass1.client, ...
+
+**Name_2** -> Processing server, including queue technique -> com.ass1.server
+
+**Name_3** -> Cache technique -> ?
+
+**Name_4** -> Docker/Container -> root
+
+
+## Deadline
 
 **Deadline:** 23:59, 24 September 2026 (Devilry).

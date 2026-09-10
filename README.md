@@ -43,7 +43,7 @@ Toolchain used: **JDK 17**, **Maven 3.9**, **Docker**.
 
 Philip Elias Fleischer: philipef@uio.no
 
-: anwarahe@uio.no
+Anwar Ahmed Hersi : anwarahe@uio.no
 
 Håkon Gulliksrud: haakgull@uio.no
 

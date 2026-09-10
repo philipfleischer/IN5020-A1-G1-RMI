@@ -39,6 +39,17 @@ java -cp target/classes com.ass1.client.Client
 
 Toolchain used: **JDK 17**, **Maven 3.9**, **Docker**.
 
+## Members (TODO: Write names):
+
+Philip Elias Fleischer: philipef@uio.no
+
+: anwarahe@uio.no
+
+: haakgull@uio.no
+
+: matande@uio.no
+
+
 ## Workload split
 
 Member -> Responsibility -> Where the code goes

@@ -1,0 +1,6 @@
+# Keep course-provided data files like original
+# We have this file because we might have different OS-es and they may unintentially rewrite the endings or syntax
+docs/assignment/** -text
+data/** -text
+input/** -text
+*.csv -text

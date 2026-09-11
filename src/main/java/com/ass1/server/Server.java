@@ -34,19 +34,19 @@ public class Server extends UnicastRemoteObject implements ServerInterface {
     }
 
     @Override
-    public long getNumberofCities(String countryName, long threshold, String comp) throws RemoteException {
+    public int getNumberofCities(String countryName, long threshold, String comp) throws RemoteException {
         // TODO: Iterate cities and count for "countryName" and population for threshold comp.
         return 0;
     }
 
     @Override
-    public long getNumberofCountries(int cityCount, long threshold, String comp) throws RemoteException {
+    public int getNumberofCountries(int cityCount, long threshold, String comp) throws RemoteException {
         // TODO: Group cities for the countries and count for threshold/comp and where num is >= cityCount.
         return 0;
     }
 
     @Override
-    public long getNumberofCountriesMM(int cityCount, long minPopulation, long maxPopulation) throws RemoteException {
+    public int getNumberofCountriesMM(int cityCount, long minPopulation, long maxPopulation) throws RemoteException {
         // TODO: The same as above only BETWEEN min and max.
         return 0;
     }

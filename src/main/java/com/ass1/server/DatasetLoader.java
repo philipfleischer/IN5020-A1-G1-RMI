@@ -58,8 +58,8 @@ public class DatasetLoader {
         if (skippedLines > 0) {
             System.out.println("[NOTE] Skipped " + skippedLines + " lines, due to them being unreadable!");
         }
+        //Returning the cities array
+        return cities;
     }
 
-    //Returning the cities array
-    return cities;
 }

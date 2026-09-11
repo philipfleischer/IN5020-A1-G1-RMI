@@ -46,20 +46,47 @@ public class DatasetLoader {
                 }
 
                 try {
-                    cities.add(currentReadLine);
+                    cities.add(parseCSVLine(currentReadLine));
                 } catch (Exception e) {
                     // in case a single line is malformed, we catch and just log the deviation.
                     skippedLines++;
                     // Might add some more buffer here
                 }
             }
+            if (skippedLines > 0) {
+                System.out.println("[NOTE] Skipped " + skippedLines + " lines, due to them being unreadable!");
+            }
         }
 
-        if (skippedLines > 0) {
-            System.out.println("[NOTE] Skipped " + skippedLines + " lines, due to them being unreadable!");
-        }
         //Returning the cities array
         return cities;
     }
 
+    /**
+     * Takes a String from the csv file and parses it correctly into a City object to be put into the ArrayList cities.
+     */
+    private static City parseCSVLine(String currentParsableLine) {
+        // Using the -1 here in case the Timezone is missing, so we dont discard the whole line in that case.
+        String[] items = currentParsableLine.split(";", -1);
+
+        long geonameId = Long.parseLong(items[0].trim());
+        String name = items[1].trim();
+        String countryCode = items[2].trim();
+        String countryName = items[3].trim();
+        long population;
+        String populationInit = items[4].trim();
+        if (populationInit.isEmpty()) {
+            population = 0L;
+        } else {
+            population = Long.parseLong(populationInit);
+        }
+        String timezone = items[5].trim();
+
+        String[] coordinates = items[6].trim().split(",");
+        double latitude = Double.parseDouble(coordinates[0].trim());
+        double longitude = Double.parseDouble(coordinates[1].trim());
+
+        return new City(geonameId, name, countryCode, countryName, population, timezone, latitude, longitude);
+
+    }
 }

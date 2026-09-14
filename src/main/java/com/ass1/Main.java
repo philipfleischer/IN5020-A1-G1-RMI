@@ -1,4 +1,4 @@
-package com.ass1.server;
+package com.ass1;
 
 import com.ass1.common.City;
 

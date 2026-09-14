@@ -1,6 +1,8 @@
-package com.ass1;
+package com.ass1.server;
 
 import com.ass1.common.City;
+import com.ass1.server.Server;
+import com.ass1.server.DatasetLoader;
 
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;

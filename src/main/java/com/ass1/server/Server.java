@@ -8,6 +8,8 @@ import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
 import java.rmi.AlreadyBoundException;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * The "UnicastRemoteObject" is used by inheriting from the class so that the object
@@ -43,37 +45,66 @@ public class Server extends UnicastRemoteObject implements ServerInterface {
 
     @Override
     public long getPopulationofCountry(String countryName) throws RemoteException {
+
+        simulateNetworkLatency();
+
         // TODO: Run through the cities List and count matches - The Naive emthod counting again.
-        long norgePop = cities.stream().
-        filter(city -> city.countryName.equalsIgnoreCase(countryName)).
-        mapToLong(city -> city.population).sum();
+        long norgePop = cities.stream()
+        .filter(city -> city.countryName.equalsIgnoreCase(countryName))
+        .mapToLong(city -> city.population).sum();
 
         return norgePop;
     }
 
     @Override
     public int getNumberofCities(String countryName, long threshold, String comp) throws RemoteException {
+
+        simulateNetworkLatency();
+
         // TODO: Iterate cities and count for "countryName" and population for threshold comp.
         boolean atLeast = isMin(comp);
 
-        return (int) cities.stream().
-        filter(city -> city.countryName.equalsIgnoreCase(countryName)).
-        filter(city -> atLeast ? city.population >= threshold : city.population <= threshold).
-        count();
+        return (int) cities.stream()
+        .filter(city -> city.countryName.equalsIgnoreCase(countryName))
+        .filter(city -> atLeast ? city.population >= threshold : city.population <= threshold)
+        .count();
     }
 
     @Override
     public int getNumberofCountries(int cityCount, long threshold, String comp) throws RemoteException {
+
+        simulateNetworkLatency();
+
         // TODO: Group cities for the countries and count for threshold/comp and where num is >= cityCount.
         // 1. Filter cities on thres/comp, 2. Group remaining cities per country and count, 3. Count countries with atLeast min cityCount cities
         // Using Java Streams for this
-        return 0;
+
+        boolean atLeast = isMin(comp);
+
+        Map<String, Long> qualifyingCitiesPerCountry = cities.stream()
+        .filter(city -> atLeast ? city.population >= threshold : city.population <= threshold)
+        .collect(Collectors.groupingBy(city -> city.countryName, Collectors.counting()));
+
+        return (int) qualifyingCitiesPerCountry.values()
+        .stream()
+        .filter(count -> count >= cityCount)
+        .count();
     }
 
     @Override
     public int getNumberofCountriesMM(int cityCount, long minPopulation, long maxPopulation) throws RemoteException {
+
+        simulateNetworkLatency();
+
         // TODO: The same as above only BETWEEN min and max.
-        return 0;
+        Map<String, Long> qualifyingCitiesPerCountry = cities.stream()
+        .filter(city -> city.population >= minPopulation && city.population <= maxPopulation)
+        .collect(Collectors.groupingBy(city -> city.countryName, Collectors.counting()));
+
+        return (int) qualifyingCitiesPerCountry.values()
+        .stream()
+        .filter(count -> count >= cityCount)
+        .count();
     }
 }
 

@@ -27,21 +27,46 @@ public class Server extends UnicastRemoteObject implements ServerInterface {
         this.cities = cities;
     }
 
+    // This is jsut to simulate the 80ms network delay that the assignment asks for, but this is a naive/crude way to do it, I think this is someone elses responsibility in the group.
+    private void simulateNetworkLatency() {
+        try {
+            Thread.sleep(80);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt(); // Letting the Thread itself know if the interruption exception
+        }
+    }
+
+    // Is "min" true?
+    private static boolean isMin(String comp) {
+        return comp.equalsIgnoreCase("min");
+    }
+
     @Override
     public long getPopulationofCountry(String countryName) throws RemoteException {
         // TODO: Run through the cities List and count matches - The Naive emthod counting again.
-        return 0;
+        long norgePop = cities.stream().
+        filter(city -> city.countryName.equalsIgnoreCase(countryName)).
+        mapToLong(city -> city.population).sum();
+
+        return norgePop;
     }
 
     @Override
     public int getNumberofCities(String countryName, long threshold, String comp) throws RemoteException {
         // TODO: Iterate cities and count for "countryName" and population for threshold comp.
-        return 0;
+        boolean atLeast = isMin(comp);
+
+        return (int) cities.stream().
+        filter(city -> city.countryName.equalsIgnoreCase(countryName)).
+        filter(city -> atLeast ? city.population >= threshold : city.population <= threshold).
+        count();
     }
 
     @Override
     public int getNumberofCountries(int cityCount, long threshold, String comp) throws RemoteException {
         // TODO: Group cities for the countries and count for threshold/comp and where num is >= cityCount.
+        // 1. Filter cities on thres/comp, 2. Group remaining cities per country and count, 3. Count countries with atLeast min cityCount cities
+        // Using Java Streams for this
         return 0;
     }
 

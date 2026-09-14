@@ -49,11 +49,11 @@ public class Server extends UnicastRemoteObject implements ServerInterface {
         simulateNetworkLatency();
 
         // TODO: Run through the cities List and count matches - The Naive emthod counting again.
-        long norgePop = cities.stream()
+        long totalPopulation = cities.stream()
         .filter(city -> city.countryName.equalsIgnoreCase(countryName))
         .mapToLong(city -> city.population).sum();
 
-        return norgePop;
+        return totalPopulation;
     }
 
     @Override

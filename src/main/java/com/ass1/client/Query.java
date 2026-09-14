@@ -9,7 +9,7 @@ import java.util.List;
 
 /**
  * One line from the input file: <method name> <args...> Zone:#
- * argTokens = raw args, split-by-method happens later (in Client).
+ * argTokens = raw args, split-by-method happens in Client.
  */
 public class Query {
     final String rawLine; // Original line
@@ -30,11 +30,11 @@ public class Query {
 
         String methodName = tokens[0];
 
-        // The last token is always "Zone:<number>" -> split on ':', not ';'.
+        // The last token is always "Zone:<number>".
         String zoneToken = tokens[tokens.length - 1];
         int zone = Integer.parseInt(zoneToken.substring(zoneToken.indexOf(':') + 1));
 
-        // Everything between the method name and the Zone tag is the (not yet split) argument list.
+        // Everything between the method name and the Zone tag is the argument list.
         String[] argTokens = Arrays.copyOfRange(tokens, 1, tokens.length - 1);
 
         return new Query(line, methodName, argTokens, zone);

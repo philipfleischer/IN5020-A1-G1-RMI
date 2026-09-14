@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
  * A "stub" ("stedfortreder") that the clients can call methods on over the network remotely.
  *
  * Naive implementation: every method scans the full "cities" list from scratch, no caching.
- * TODO (Anwar's part): per-server FIFO queue + single execution thread, real execution/waiting time.
+ * TODO: per-server FIFO queue + single execution thread, real execution/waiting time.
  */
 public class Server extends UnicastRemoteObject implements ServerInterface {
 
@@ -26,7 +26,7 @@ public class Server extends UnicastRemoteObject implements ServerInterface {
         this.cities = cities;
     }
 
-    // Blocks 80ms per call to simulate the network delay the assignment requires (section 2.3).
+    // Blocks 80ms per call to simulate the network delay the assignment requires
     private void simulateNetworkLatency() {
         try {
             Thread.sleep(80);
@@ -45,7 +45,7 @@ public class Server extends UnicastRemoteObject implements ServerInterface {
 
         simulateNetworkLatency();
 
-        // Sum the population of every city whose country matches (case-insensitive).
+        // Sum the population of every city whose country matches.
         long totalPopulation = cities.stream()
         .filter(city -> city.countryName.equalsIgnoreCase(countryName))
         .mapToLong(city -> city.population).sum();
@@ -58,7 +58,7 @@ public class Server extends UnicastRemoteObject implements ServerInterface {
 
         simulateNetworkLatency();
 
-        // Count cities in the country that pass the threshold/comp filter.
+        // Count cities in the country that pass the threshold or comp filter.
         boolean atLeast = isMin(comp);
 
         return (int) cities.stream()

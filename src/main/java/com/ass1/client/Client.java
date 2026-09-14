@@ -35,8 +35,8 @@ public class Client {
             String result = invoke(server, query);
             long turnaroundTime = System.currentTimeMillis() - start;
 
-            // Placeholder until Server has a real request queue (Anwar's part) - then these
-            // should come back from the server instead of being hardcoded here.
+            // Placeholder until Server has a real request queue,
+            // TODO: Should come back from the server instead of being hardcoded here.
             long executionTime = 0;
             long waitingTime = 0;
 
@@ -47,8 +47,7 @@ public class Client {
             turnaroundByMethod.computeIfAbsent(query.methodName, k -> new ArrayList<>()).add(turnaroundTime);
         }
 
-        // Write one line per query, then one avg/min/max summary line per method name
-        // (required output format, see docs/assignment/exercise_1.pdf "3 Client" point 4).
+        // Writes one line per query, then one avg/min/max summary line per method name
         try (PrintWriter writer = new PrintWriter("naive_server.txt")) {
             for (String line : outputLines) {
                 writer.println(line);
@@ -71,20 +70,20 @@ public class Client {
         System.out.println("[CLIENT] --> Wrote: " + outputLines.size() + " results to naive_server.txt");
     }
 
-    // Dispatch: picks the matching remote method and pulls its arguments out of argTokens.
-    // Each case splits argTokens differently, since the argument count/shape differs per method.
+    // The dispatch picks the matching remote method and pulls its arguments out of argTokens.
+    // Each case splits argTokens differently, since the argument count differs per method.
     private static String invoke(ServerInterface server, Query query) throws Exception {
         switch (query.methodName) {
 
             case "getPopulationofCountry" -> {
-                // Every token is part of the country name (it can contain spaces, e.g. "French Guiana").
+                // Every token is part of the country name. Can contain spaces, "French Guiana".
                 String countryName = String.join(" ", query.argTokens);
 
                 return String.valueOf(server.getPopulationofCountry(countryName));
             }
 
             case "getNumberofCities" -> {
-                // Last 2 tokens are threshold/comp, everything before that is the country name.
+                // Last 2 tokens are threshold or comp, everything before that is the country name.
                 String comp = query.argTokens[query.argTokens.length - 1];
                 long threshold = Long.parseLong(query.argTokens[query.argTokens.length - 2]);
                 String countryName = String.join(" ",

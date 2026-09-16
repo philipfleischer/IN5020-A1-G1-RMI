@@ -17,8 +17,8 @@ import java.util.List;
  */
 public class DatasetLoader {
     /**
-     * @param filePath is the path to the csv file.
-     * @return all the cities in the dataset as a city-obj list.
+     * filePath is the path to the csv file.
+     * return all the cities in the dataset as a city-obj list.
      */
     public static List<City> load(String filePath) throws IOException {
         List<City> cities = new ArrayList<>();

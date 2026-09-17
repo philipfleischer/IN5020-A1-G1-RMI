@@ -1,4 +1,6 @@
 package com.ass1.client;
+import com.ass1.proxy.ProxyInterface;
+import com.ass1.proxy.ServerLocation;
 import com.ass1.server.ServerInterface;
 
 import java.rmi.registry.LocateRegistry;
@@ -15,9 +17,10 @@ import java.util.Map;
 // Line parsing (Query.parseLine / Query.readQueries) lives in Query.java, next to this file.
 public class Client {
     public static void main(String[] args) throws Exception {
-        // Connect to the registry Main.java (server side) created, and get the remote stub.
-        Registry registry = LocateRegistry.getRegistry(1099);
-        ServerInterface server = (ServerInterface) registry.lookup("StatisticsServer");
+        // Proxy is the only fixed address the client needs to know, and
+        // every server adress comes as the proxy instead, per query
+        Registry proxyRegistry = LocateRegistry.getRegistry("localhost", 1100);
+        ProxyInterface proxy = (ProxyInterface) proxyRegistry.lookup("ProxyService");
 
         List<Query> queries = Query.readQueries("input/exercise_1_input.txt");
         System.out.println("[CLIENT] -- Loaded " + queries.size() + " queries.");
@@ -31,17 +34,31 @@ public class Client {
 
             // Time only the remote call itself -> this is the query's turnaround time.
             long start = System.currentTimeMillis();
+
+            // Asking the proxy which server should handle the query's zone
+            ServerLocation lcoation = proxy.getServerForZone(query.zone);
+
+            // Simulating the extra distance cost
+            if (lcoation.extraNetworkDelayMs > 0) {
+                Thread.sleep(lcoation.extraNetworkDelayMs);
+            }
+
+            // Conencting th the server the proxy chose and making the network call
+            Registry serverRegistry = LocateRegistry.getRegistry(lcoation.host, lcoation.port);
+            ServerInterface server = (ServerInterface) serverRegistry.lookup("StatisticsServer");
             String result = invoke(server, query);
+
             long turnaroundTime = System.currentTimeMillis() - start;
 
             // Placeholder until Server has a real request queue,
-            // TODo: Should come back from the server instead of being hardcoded here.
+            // TODo: Should come back from the server instead of being hardcoded here?
             long executionTime = 0;
             long waitingTime = 0;
 
             outputLines.add(result + " " + query.rawLine
                     + " (turnaround time: " + turnaroundTime + " ms, execution time: " + executionTime
-                    + " ms, waiting time: " + waitingTime + " ms, processed by Server 1)");
+                    + " ms, waiting time: " + waitingTime + " ms, processed by Server "
+                    + lcoation.zone + ")");
 
             turnaroundByMethod.computeIfAbsent(query.methodName, k -> new ArrayList<>()).add(turnaroundTime);
         }

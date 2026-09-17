@@ -20,6 +20,11 @@ public class Proxy extends UnicastRemoteObject implements ProxyInterface {
     // Next zone number to hand out. Starts at 1, just counts up every time a new server registers.
     private int nextZoneNumber = 1;
 
+    // Made a total number of zones in this simulated env
+    // We need to have this set up, so that we get holes in the ring
+    // by doing this we can simulate the distanceClockwise() and resolveZone() functions
+    private static final int TOTAL_ZONES = 8;
+
     // Protected here since we do not want anyone to create a Proxy instance.
     protected Proxy() throws RemoteException {
         super();
@@ -30,17 +35,26 @@ public class Proxy extends UnicastRemoteObject implements ProxyInterface {
     // Without synchronized, two servers could both read nextZoneNumber before either one
     // increments it and end up getting handed the same zone number, which would break everything.
     @Override
-    public synchronized int registerServer(String host, int port) throws RemoteException {
-        int assignedZone = nextZoneNumber;
-        nextZoneNumber++;
+    public synchronized boolean registerServer(String host, int port, int zone) throws RemoteException {
+        if (zone < 1 || zone > TOTAL_ZONES) {
+            System.out.println("[PROXY] - Rejected server " + host + ":" + port
+                    + " - zone " + zone + " is outside the valid range (1-" + TOTAL_ZONES + ").");
+            return false;
+        }
 
-        ServerEntry entry = new ServerEntry(host, port, assignedZone);
-        serversByZone.put(assignedZone, entry);
+        if (serversByZone.containsKey(zone)) {
+            System.out.println("[PROXY] - Rejected server " + host + ":" + port
+                + " - zone " + zone + " is already taken!"
+            );
+            return false;
+        }
 
-        System.out.println("[PROXY] New server registered: " + host + ":" + port + " -> zone " + assignedZone);
+        ServerEntry entry = new ServerEntry(host, port, zone);
+        serversByZone.put(zone, entry);
 
-        // Server keeps this around too so it can print/log its own zone number if it wants to.
-        return assignedZone;
+        System.out.println("[PROXY] - New server registered: " + host + ":" + port + " -> zone " + zone);
+
+        return true;
     }
 
     @Override
@@ -140,12 +154,10 @@ public class Proxy extends UnicastRemoteObject implements ProxyInterface {
     // for the neighbor tie-break rule and for the simulated network delay formula
     // (80 + distance * 30 ms) that the client/server side needs for neighbor-zone requests.
     private int distanceClockwise(int fromZone, int toZone) {
-        int totalZones = nextZoneNumber - 1; // how many zone numbers exist right now
-
         int distance = toZone - fromZone;
         if (distance < 0) {
             // Went "Backwards" and wrapped from highest to lowest zone number.
-            distance += totalZones;
+            distance += TOTAL_ZONES;
         }
         return distance;
     }

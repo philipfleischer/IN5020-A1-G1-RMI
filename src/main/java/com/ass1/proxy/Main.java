@@ -9,7 +9,18 @@ import java.rmi.registry.Registry;
  **/
 public class Main {
     public static void main(String[] args) throws Exception {
-        // TODo: pick port 1100 for example, that is different from the server port
-        // TODo: create the Proxy object, start a registry on that port, and bind the Proxy under a name like "ProxyService" - same idea as how server/Main.java does it for "StatisticsServer".
+        // Has to be a different port than the servers (they all sit on 1099), otherwise this
+        // registry would collide with whichever server happens to start first on this machine.
+        int port = 1100;
+
+        Proxy proxy = new Proxy();
+
+        // Same idea as server/Main.java: start a fresh registry and bind our object under a
+        // name, so other JVMs (the Servers registering, the Client asking for zones) can look
+        // it up by that name instead of needing to know anything about the Proxy class itself.
+        Registry registry = LocateRegistry.createRegistry(port);
+        registry.rebind("ProxyService", proxy);
+
+        System.out.println("Proxy running and waiting for servers/clients, port " + port);
     }
 }

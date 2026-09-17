@@ -4,13 +4,13 @@ import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.Collections;
 
 /**
  * The actual proxy/load-balancer object. Keeps track of every server that has registered,
  * grouped by zone, and decides which server each client should actually be sent to.
  * TODo: getting the real queue length off a server needs some kind of getQueueLength() (or similar) on ServerInterface, which doesn't exist yet since the queue itself isn't built.
  */
-
 public class Proxy extends UnicastRemoteObject implements ProxyInterface {
 
     // zone number -> the server registered in that zone. Map instead of an array/list since
@@ -20,14 +20,27 @@ public class Proxy extends UnicastRemoteObject implements ProxyInterface {
     // Next zone number to hand out. Starts at 1, just counts up every time a new server registers.
     private int nextZoneNumber = 1;
 
+    // Protected here since we do not want anyone to create a Proxy instance.
     protected Proxy() throws RemoteException {
         super();
     }
 
+    // Marked synchronized because multiple Servers could technically call this at the exact
+    // same time (each on its own RMI thread) when the group is starting them all up together.
+    // Without synchronized, two servers could both read nextZoneNumber before either one
+    // increments it and end up getting handed the same zone number, which would break everything.
     @Override
-    public int registerServer(String host, int port) throws RemoteException {
-        // TODo: build a new ServerEntry for this host/port, give it nextZoneNumber, put it into serversByZone, bump nextZoneNumber by one, then return the zone number we gave it.
-        return 0;
+    public synchronized int registerServer(String host, int port) throws RemoteException {
+        int assignedZone = nextZoneNumber;
+        nextZoneNumber++;
+
+        ServerEntry entry = new ServerEntry(host, port, assignedZone);
+        serversByZone.put(assignedZone, entry);
+
+        System.out.println("[PROXY] New server registered: " + host + ":" + port + " -> zone " + assignedZone);
+
+        // Server keeps this around too so it can print/log its own zone number if it wants to.
+        return assignedZone;
     }
 
     @Override
@@ -40,7 +53,56 @@ public class Proxy extends UnicastRemoteObject implements ProxyInterface {
         //      fewest requests waiting, and break ties by picking whoever is closest clockwise
         //   4) if literally every server is overloaded, fall back to the original zone anyway
         //   5) call maybeRefreshLoad() on whichever server ends up getting picked
-        return null;
+
+        if (serversByZone.isEmpty()) {
+            // Nobody has registered at all yet, therefore there is nothing to do
+            throw new RemoteException("No servers registered with the proxy-server as of this moment.");
+        }
+
+        // Step 1: If the requested zone does not actually have a server, we walk clockwise to find one that does.
+        // If zone 6 does not exist but 7 does, then we treat this request as if it came from zone 7
+        int actualZone = resolveZone(zone);
+        ServerEntry homeServer = serversByZone.get(actualZone);
+
+        // Step 2: Scenario A - server is not overloaded and we send client there
+        if (!isOverloaded(homeServer)) {
+            maybeRefreshLoad(homeServer);
+            return toLocation(homeServer);
+        }
+
+        // Step 3: Home server is overloaded, we choose the one with least load/requests in queue.
+        // If multiple have the same minimum load, then we choose the one physically closest
+        ServerEntry bestCanditate = null;
+
+        for (ServerEntry candidate : serversByZone.values()) {
+            if (candidate == homeServer) {
+                continue; // Checked in step 2, but oh well
+            }
+            if (isOverloaded(candidate)) {
+                continue; // Overloaded as well, so we skip
+            }
+
+            boolean isBetter = bestCanditate == null
+                    || candidate.lastKnownQueueLength < bestCanditate.lastKnownQueueLength
+                    || (candidate.lastKnownQueueLength == bestCanditate.lastKnownQueueLength
+                            && distanceClockwise(actualZone, candidate.zone) < distanceClockwise(actualZone,
+                                    bestCanditate.zone));
+
+            if (isBetter) {
+                bestCanditate = candidate;
+            }
+        }
+
+        // Step 4: Every server is currently overloaded, so we fall back to the original server we first started with for the process´s zone
+        ServerEntry chosen = (bestCanditate != null) ? bestCanditate : homeServer;
+
+        maybeRefreshLoad(chosen);
+        return toLocation(chosen);
+    }
+
+    // Marshalling the bookkeeping object into a small Serializable object that can be sent as bytes, so that we can send it back to the client over RMI.
+    private ServerLocation toLocation(ServerEntry entry) {
+        return new ServerLocation(entry.host, entry.port, entry.zone);
     }
 
     // If nobody registered in "zone", we walk clockwise to the next zone number that does

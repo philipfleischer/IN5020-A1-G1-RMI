@@ -11,7 +11,6 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-
 // The client reads a input file, sends it to the server using RMI and writes results to an output file.
 // Line parsing (Query.parseLine / Query.readQueries) lives in Query.java, next to this file.
 public class Client {

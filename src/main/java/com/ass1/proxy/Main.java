@@ -9,7 +9,7 @@ import java.rmi.registry.Registry;
  **/
 public class Main {
     public static void main(String[] args) throws Exception {
-        // TODO: pick port 1100 for example, that is different from the server port
-        // TODO: create the Proxy object, start a registry on that port, and bind the Proxy under a name like "ProxyService" - same idea as how server/Main.java does it for "StatisticsServer".
+        // TODo: pick port 1100 for example, that is different from the server port
+        // TODo: create the Proxy object, start a registry on that port, and bind the Proxy under a name like "ProxyService" - same idea as how server/Main.java does it for "StatisticsServer".
     }
 }

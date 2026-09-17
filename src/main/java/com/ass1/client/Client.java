@@ -36,7 +36,7 @@ public class Client {
             long turnaroundTime = System.currentTimeMillis() - start;
 
             // Placeholder until Server has a real request queue,
-            // TODO: Should come back from the server instead of being hardcoded here.
+            // TODo: Should come back from the server instead of being hardcoded here.
             long executionTime = 0;
             long waitingTime = 0;
 

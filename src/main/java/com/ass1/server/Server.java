@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
  * A "stub" ("stedfortreder") that the clients can call methods on over the network remotely.
  *
  * Naive implementation: every method scans the full "cities" list from scratch, no caching.
- * TODO: per-server FIFO queue + single execution thread, real execution/waiting time.
+ * TODo: per-server FIFO queue + single execution thread, real execution/waiting time.
  */
 public class Server extends UnicastRemoteObject implements ServerInterface {
 

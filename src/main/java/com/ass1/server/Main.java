@@ -12,12 +12,12 @@ import java.util.List;
  *  2) Starting a RMI-Registry
  *  3) Registrering the server under a name or id in the register.
  *
- * TODO: Change from manual static port to the proxy servers port (once the Proxy exists)
+ * TODo: Change from manual static port to the proxy servers port (once the Proxy exists)
  */
 
 public class Main {
     public static void main(String[] args) throws Exception {
-        // TODO: take datasetPath/port as args instead of hardcoding, once we need more than one server
+        // TODo: take datasetPath/port as args instead of hardcoding, once we need more than one server
 
         String datasetPath = "data/exercise_1_dataset.csv";
         int port = 1099; // A standard RMI port

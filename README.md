@@ -54,13 +54,13 @@ Håkon Gulliksrud: haakgull@uio.no
 
 Member -> Responsibility -> Where the code goes
 
-**Name_1** -> Client and Proxy server -> com.ass1.client, ...
+**Philip** -> Client and Proxy server -> com.ass1.client, ...
 
-**Name_2** -> Processing server, including queue technique -> com.ass1.server
+**Anwar** -> Processing server, including queue technique -> com.ass1.server
 
-**Name_3** -> Cache technique -> ?
+**Håkon** -> Cache technique -> ?
 
-**Name_4** -> Docker/Container -> root
+**Mateus** -> Docker/Container -> root
 
 
 ## Deadline

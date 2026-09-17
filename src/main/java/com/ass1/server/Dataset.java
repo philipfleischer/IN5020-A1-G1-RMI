@@ -12,6 +12,11 @@ import java.util.Map;
 /**
  * Parses the CSV dataset and answers the four statistics queries.
  * Plain static functions not tied to caching or threading.
+ *
+ * Every public query method validates its arguments first and throws
+ * IllegalArgumentException on bad input, instead of silently returning
+ * a wrong answer or crashing. Server.java catches this per-task, so one
+ * bad query never brings down the server or affects other queries.
  */
 public class Dataset {
 
@@ -39,22 +44,25 @@ public class Dataset {
         return cities;
     }
 
-    // 2.1.a - Kept separate from RMI/queue logic on purpose: this is a pure,
-    // static, testable function with no thread/queue/RMI dependency, so it
-    // could be verified against the PDF's expected answers on its own.
+    // 2.1.a
     public static long getPopulationofCountry(List<CityRecord> cities, String countryName) {
+        validateCountryName(countryName);
+
         long sum = 0;
         for (CityRecord c : cities) {
             if (c.countryName().equalsIgnoreCase(countryName)) {
                 sum += c.population();
             }
         }
-        return sum;
+        return sum; // 0 if the country doesn't exist - not an error, just no match
     }
 
-    // 2.1.b - isMin/matches are shared by all four methods instead of
-    // repeating the same if/else logic - one place to fix if a bug appears.
+    // 2.1.b
     public static int getNumberofCities(List<CityRecord> cities, String countryName, int threshold, String comp) {
+        validateCountryName(countryName);
+        validateComp(comp);
+        validateNonNegative(threshold, "threshold");
+
         boolean min = isMin(comp);
         int count = 0;
         for (CityRecord c : cities) {
@@ -66,10 +74,12 @@ public class Dataset {
         return count;
     }
 
-    // 2.1.c - Single pass over all cities (O(n)) using a map to count matches
-    // per country, instead of looping countries x cities (O(n^2)). Matters
-    // here since naive mode already re-parses 140k rows on every call.
+    // 2.1.c
     public static int getNumberofCountries(List<CityRecord> cities, int cityCount, int threshold, String comp) {
+        validateNonNegative(cityCount, "cityCount");
+        validateNonNegative(threshold, "threshold");
+        validateComp(comp);
+
         boolean min = isMin(comp);
         Map<String, Integer> matchingCitiesPerCountry = new HashMap<>();
 
@@ -86,8 +96,16 @@ public class Dataset {
         return result;
     }
 
-    // 2.1.d - Same as 2.1.c, but with a population range instead of a single threshold.
+    // 2.1.d
     public static int getNumberofCountriesMM(List<CityRecord> cities, int cityCount, int minPopulation, int maxPopulation) {
+        validateNonNegative(cityCount, "cityCount");
+        validateNonNegative(minPopulation, "minPopulation");
+        validateNonNegative(maxPopulation, "maxPopulation");
+        if (minPopulation > maxPopulation) {
+            throw new IllegalArgumentException(
+                    "minPopulation (" + minPopulation + ") must not be greater than maxPopulation (" + maxPopulation + ")");
+        }
+
         Map<String, Integer> matchingCitiesPerCountry = new HashMap<>();
 
         for (CityRecord c : cities) {
@@ -102,6 +120,26 @@ public class Dataset {
             if (n >= cityCount) result++;
         }
         return result;
+    }
+
+    // ================= Validation helpers =================
+
+    private static void validateCountryName(String countryName) {
+        if (countryName == null || countryName.isBlank()) {
+            throw new IllegalArgumentException("countryName must not be empty");
+        }
+    }
+
+    private static void validateComp(String comp) {
+        if (comp == null || !(comp.equalsIgnoreCase("min") || comp.equalsIgnoreCase("max"))) {
+            throw new IllegalArgumentException("comp must be 'min' or 'max', got: " + comp);
+        }
+    }
+
+    private static void validateNonNegative(int value, String fieldName) {
+        if (value < 0) {
+            throw new IllegalArgumentException(fieldName + " must not be negative, got: " + value);
+        }
     }
 
     private static boolean isMin(String comp) {

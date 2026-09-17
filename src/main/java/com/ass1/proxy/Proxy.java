@@ -109,28 +109,59 @@ public class Proxy extends UnicastRemoteObject implements ProxyInterface {
     // have a server and use that one instead (wrapping back to zone 1 after the highest zone).
     // Called first thing inside getServerForZone.
     private int resolveZone(int zone) {
-        // TODo: implement
-        return zone;
+        if (serversByZone.containsKey(zone)) {
+            return zone; // Zone has a server here
+        }
+
+        // Looking for the smallest incremented zone number (next clockwise, that has load cap)
+        int nextZoneClockwise = -1;
+        for (int registeredZone : serversByZone.keySet()) {
+            if (registeredZone > zone) {
+                if (nextZoneClockwise == -1 || registeredZone < nextZoneClockwise) {
+                    nextZoneClockwise = registeredZone;
+                }
+            }
+        }
+
+        if (nextZoneClockwise != -1) {
+            return nextZoneClockwise;
+        }
+
+        // If we get here, then we ran through all zones, and we nned to wrap around to the start to the smallest zone
+        return Collections.min(serversByZone.keySet());
     }
 
     // A server counts as "overloaded" once it has 18 or more requests sitting in its waiting list.
     private boolean isOverloaded(ServerEntry entry) {
-        // TODo: implement
-        return false;
+        return entry.lastKnownQueueLength >= 18;
     }
 
     // How many zones apart two zones are, going clockwise from fromZone to toZone. Used both
     // for the neighbor tie-break rule and for the simulated network delay formula
     // (80 + distance * 30 ms) that the client/server side needs for neighbor-zone requests.
     private int distanceClockwise(int fromZone, int toZone) {
-        // TODo: implement
-        return 0;
+        int totalZones = nextZoneNumber - 1; // how many zone numbers exist right now
+
+        int distance = toZone - fromZone;
+        if (distance < 0) {
+            // Went "Backwards" and wrapped from highest to lowest zone number.
+            distance += totalZones;
+        }
+        return distance;
     }
 
     // Every 18th time we hand this particular server out to a client, we are supposed to go
     // check in on it and update lastKnownQueueLength, but that has to run on its own thread
     // so the client is not stuck waiting around for it. Called at the end of getServerForZone.
     private void maybeRefreshLoad(ServerEntry entry) {
-        // TODo: implement
+        entry.assignmentsSinceLastRefresh++;
+
+        if (entry.assignmentsSinceLastRefresh >= 18) {
+            entry.assignmentsSinceLastRefresh = 0;
+
+            //TODo: The queue implementation needs to do something here?
+            // Do not know exactly how server.getQueueLenght() is suppoeed to go here
+            System.out.println("[PROXY] - Refresh load for zone");
+        }
     }
 }

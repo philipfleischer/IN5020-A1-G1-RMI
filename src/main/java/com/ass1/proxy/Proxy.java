@@ -164,4 +164,17 @@ public class Proxy extends UnicastRemoteObject implements ProxyInterface {
             System.out.println("[PROXY] - Refresh load for zone");
         }
     }
+
+    //TODo: fjern midlertidig test klasse før levering
+    // TEST-ONLY HOOK: lets our manual test class fake a queue length for a zone,
+    // without needing a real Server object or real RMI calls. Production code (the
+    // real maybeRefreshLoad, once it's implemented) will set this the proper way,
+    // by actually calling the server. This method should never be called from
+    // anywhere except test code.
+    void forceQueueLengthForTesting(int zone, int queueLength) {
+        ServerEntry entry = serversByZone.get(zone);
+        if (entry != null) {
+            entry.lastKnownQueueLength = queueLength;
+        }
+    }
 }

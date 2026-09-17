@@ -81,7 +81,7 @@ public class Proxy extends UnicastRemoteObject implements ProxyInterface {
         // Step 2: Scenario A - server is not overloaded and we send client there
         if (!isOverloaded(homeServer)) {
             maybeRefreshLoad(homeServer);
-            return toLocation(homeServer);
+            return toLocation(homeServer, zone);
         }
 
         // Step 3: Home server is overloaded, we choose the one with least load/requests in queue.
@@ -111,12 +111,14 @@ public class Proxy extends UnicastRemoteObject implements ProxyInterface {
         ServerEntry chosen = (bestCanditate != null) ? bestCanditate : homeServer;
 
         maybeRefreshLoad(chosen);
-        return toLocation(chosen);
+        return toLocation(chosen, zone);
     }
 
     // Marshalling the bookkeeping object into a small Serializable object that can be sent as bytes, so that we can send it back to the client over RMI.
-    private ServerLocation toLocation(ServerEntry entry) {
-        return new ServerLocation(entry.host, entry.port, entry.zone);
+    private ServerLocation toLocation(ServerEntry entry, int requestedZone) {
+        int distance = distanceClockwise(requestedZone, entry.zone);
+        int extraDelay = distance * 30; // 0 ig same zone, or 30ms per zone of distance travelled
+        return new ServerLocation(entry.host, entry.port, entry.zone, extraDelay);
     }
 
     // If nobody registered in "zone", we walk clockwise to the next zone number that does

@@ -96,6 +96,23 @@ public class ProxyLogicTest {
         // changed to Zone 1".
         ServerLocation result6 = proxy.getServerForZone(8);
         printResult("Client asks for zone 8 (doesn't exist), expect it to resolve to zone 1", result6, 1);
+
+        System.out.println("--- Test 6: extra network delay reflects distance ---");
+        // Reuse the same "zone 1 overloaded, zone 4 wins" situation from Test 3, and
+        // check
+        // that the client gets told to simulate the correct extra delay: zone 1 -> zone
+        // 4
+        // is a distance of 3, so extra delay should be 3 * 30 = 90ms.
+        proxy.forceQueueLengthForTesting(1, 20);
+        proxy.forceQueueLengthForTesting(3, 15);
+        proxy.forceQueueLengthForTesting(4, 5);
+        proxy.forceQueueLengthForTesting(5, 15);
+        proxy.forceQueueLengthForTesting(7, 15);
+        ServerLocation result7 = proxy.getServerForZone(1);
+        boolean delayCorrect = result7.extraNetworkDelayMs == 90;
+        System.out.println((delayCorrect ? "[PASS] " : "[FAIL] ")
+                + "Zone 1 -> zone " + result7.zone + " extra delay is " + result7.extraNetworkDelayMs
+                + "ms, expected 90ms");
     }
 
     // Small helper so registering doesn't need 3 lines of boilerplate every time

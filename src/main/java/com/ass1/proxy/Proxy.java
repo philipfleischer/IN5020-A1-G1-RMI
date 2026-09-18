@@ -1,6 +1,10 @@
 package com.ass1.proxy;
 
+import com.ass1.server.ServerInterface;
+
 import java.rmi.RemoteException;
+import java.rmi.registry.LocateRegistry;
+import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -9,7 +13,6 @@ import java.util.Collections;
 /**
  * The actual proxy/load-balancer object. Keeps track of every server that has registered,
  * grouped by zone, and decides which server each client should actually be sent to.
- * TODo: getting the real queue length off a server needs some kind of getQueueLength() (or similar) on ServerInterface, which doesn't exist yet since the queue itself isn't built.
  */
 public class Proxy extends UnicastRemoteObject implements ProxyInterface {
 
@@ -173,9 +176,29 @@ public class Proxy extends UnicastRemoteObject implements ProxyInterface {
         if (entry.assignmentsSinceLastRefresh >= 18) {
             entry.assignmentsSinceLastRefresh = 0;
 
-            //TODo: The queue implementation needs to do something here?
-            // Do not know exactly how server.getQueueLenght() is suppoeed to go here
-            System.out.println("[PROXY] - Refresh load for zone");
+            // Own thread, on purpose - the client is still waiting on getServerForZone to
+            // return, and it should not have to sit through an extra RMI round trip to some
+            // other server just because it happened to be the 18th client for this zone.
+            Thread refreshThread = new Thread(() -> refreshLoad(entry), "load-refresh-zone-" + entry.zone);
+            refreshThread.setDaemon(true);
+            refreshThread.start();
+        }
+    }
+
+    // Actually connects to the server and asks it how many requests it currently has
+    // waiting. Only ever called from maybeRefreshLoad() above, on its own background thread.
+    private void refreshLoad(ServerEntry entry) {
+        try {
+            Registry serverRegistry = LocateRegistry.getRegistry(entry.host, entry.port);
+            ServerInterface server = (ServerInterface) serverRegistry.lookup("Server-Zone-" + entry.zone);
+            entry.lastKnownQueueLength = server.getWaitingListSize();
+            System.out.println("[PROXY] - Refreshed load for zone " + entry.zone + ": "
+                    + entry.lastKnownQueueLength + " waiting");
+        } catch (Exception e) {
+            // Server might be slow or briefly unreachable - keep the old lastKnownQueueLength
+            // rather than crashing the whole proxy over one failed background refresh.
+            System.out.println("[PROXY] - WARNING: failed to refresh load for zone " + entry.zone
+                    + ": " + e.getMessage());
         }
     }
 

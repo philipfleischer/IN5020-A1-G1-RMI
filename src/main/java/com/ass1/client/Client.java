@@ -1,4 +1,6 @@
 package com.ass1.client;
+import com.ass1.proxy.ProxyInterface;
+import com.ass1.proxy.ServerLocation;
 import com.ass1.server.ServerInterface;
 import com.ass1.server.QueryResult;
 
@@ -12,14 +14,14 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-
 // The client reads a input file, sends it to the server using RMI and writes results to an output file.
 // Line parsing (Query.parseLine / Query.readQueries) lives in Query.java, next to this file.
 public class Client {
     public static void main(String[] args) throws Exception {
-        // Connect to the registry Main.java (server side) created, and get the remote stub.
-        Registry registry = LocateRegistry.getRegistry(1099);
-        ServerInterface server = (ServerInterface) registry.lookup("StatisticsServer");
+        // Proxy is the only fixed address the client needs to know, and
+        // every server adress comes as the proxy instead, per query
+        Registry proxyRegistry = LocateRegistry.getRegistry("localhost", 1100);
+        ProxyInterface proxy = (ProxyInterface) proxyRegistry.lookup("ProxyService");
 
         List<Query> queries = Query.readQueries("input/exercise_1_input.txt");
         System.out.println("[CLIENT] -- Loaded " + queries.size() + " queries.");
@@ -36,22 +38,60 @@ public class Client {
 
             // Time the remote call itself -> this is the query's turnaround time.
             long start = System.currentTimeMillis();
-            QueryResult result = invoke(server, query);
-            long turnaroundTime = System.currentTimeMillis() - start;
 
-            // Real values now come straight from the server's QueryResult,
-            // instead of being hardcoded to 0.
-            long executionTime = result.getExecutionTimeMs();
-            long waitingTime = result.getWaitingTimeMs();
-            int servedByZone = result.getServedByZone();
+            // One bad line in the input file (e.g. a missing country name - the real
+            // input file has a couple of these) must not take down the other ~3000 queries.
+            // Catch anything that goes wrong for this single query, log it, and move on.
+            try {
+                // Ask the proxy which server should actually handle this query's zone.
+                ServerLocation location = proxy.getServerForZone(query.zone);
 
-            outputLines.add(result.getValue() + " " + query.rawLine
-                    + " (turnaround time: " + turnaroundTime + " ms, execution time: " + executionTime
-                    + " ms, waiting time: " + waitingTime + " ms, processed by Server " + servedByZone + ")");
+                // Simulate the extra distance cost of a neighbor-zone request (0ms if it's
+                // the same zone - see Proxy.toLocation()). The base 80ms network delay is
+                // already simulated server-side, inside Server.submitAndWait().
+                if (location.extraNetworkDelayMs > 0) {
+                    Thread.sleep(location.extraNetworkDelayMs);
+                }
 
-            turnaroundByMethod.computeIfAbsent(query.methodName, k -> new ArrayList<>()).add(turnaroundTime);
-            executionByMethod.computeIfAbsent(query.methodName, k -> new ArrayList<>()).add(executionTime);
-            waitingByMethod.computeIfAbsent(query.methodName, k -> new ArrayList<>()).add(waitingTime);
+                // Connect to whichever server the proxy picked, and make the real call.
+                // Bound as "Server-Zone-<zone>" - see Server.main().
+                Registry serverRegistry = LocateRegistry.getRegistry(location.host, location.port);
+                ServerInterface server = (ServerInterface) serverRegistry.lookup("Server-Zone-" + location.zone);
+                QueryResult result = invoke(server, query);
+
+                long turnaroundTime = System.currentTimeMillis() - start;
+
+                // Real waiting/execution time and the actual serving zone come straight from
+                // the server's own QueryResult now, instead of being hardcoded to 0.
+                long executionTime = result.getExecutionTimeMs();
+                long waitingTime = result.getWaitingTimeMs();
+                int servedByZone = result.getServedByZone();
+
+                outputLines.add(result.getValue() + " " + query.rawLine
+                        + " (turnaround time: " + turnaroundTime + " ms, execution time: " + executionTime
+                        + " ms, waiting time: " + waitingTime + " ms, processed by Server " + servedByZone + ")");
+
+                turnaroundByMethod.computeIfAbsent(query.methodName, k -> new ArrayList<>()).add(turnaroundTime);
+                executionByMethod.computeIfAbsent(query.methodName, k -> new ArrayList<>()).add(executionTime);
+                waitingByMethod.computeIfAbsent(query.methodName, k -> new ArrayList<>()).add(waitingTime);
+            } catch (Exception e) {
+                // Still one output line per input line, per the assignment's format - just
+                // marked as an error instead of a real result, and left out of the avg/min/max
+                // stats below since there's no valid timing data for a failed call.
+                //
+                // RMI wraps the real error in layers of RemoteException, and the resulting
+                // message string has embedded newlines - walk down to the root cause and
+                // strip any leftover line breaks, so this is still exactly one output line.
+                Throwable rootCause = e;
+                while (rootCause.getCause() != null) {
+                    rootCause = rootCause.getCause();
+                }
+                String reason = rootCause.getMessage() != null ? rootCause.getMessage() : rootCause.toString();
+                reason = reason.replaceAll("\\s+", " ").trim();
+
+                outputLines.add("ERROR " + query.rawLine + " (" + reason + ")");
+                System.out.println("[CLIENT] -- Query failed, skipping: " + query.rawLine + " -> " + e.getMessage());
+            }
         }
 
         // Writes one line per query, then one avg/min/max summary line per method name

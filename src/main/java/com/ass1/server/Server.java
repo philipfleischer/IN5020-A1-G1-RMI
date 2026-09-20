@@ -1,5 +1,7 @@
 package com.ass1.server;
 
+import com.ass1.proxy.ProxyInterface;
+
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -174,8 +176,20 @@ public class Server extends UnicastRemoteObject implements ServerInterface {
             System.out.println("Server for zone " + zone + " running on port " + port + "...");
             System.out.println("Bound as 'Server-Zone-" + zone + "' in the RMI registry.");
 
-            // TODO: once ProxyInterface is ready, call
-            // proxy.registerServer(myHost, port) here.
+            // Tell the proxy we exist, so it can start sending clients our way. The proxy's
+            // own registry always lives on a fixed port (1100), no matter which port/zone
+            // this particular server instance is using.
+            Registry proxyRegistry = LocateRegistry.getRegistry("localhost", 1100);
+            ProxyInterface proxy = (ProxyInterface) proxyRegistry.lookup("ProxyService");
+
+            boolean accepted = proxy.registerServer("localhost", port, zone);
+            if (!accepted) {
+                // Either the zone number is out of range, or another server already grabbed
+                // it first. We keep running anyway (still reachable directly), just flag it.
+                System.out.println("[SERVER] WARNING: proxy rejected zone " + zone + " - already taken or out of range?");
+            } else {
+                System.out.println("[SERVER] Registered with proxy as zone " + zone);
+            }
 
         } catch (Exception e) {
             e.printStackTrace();

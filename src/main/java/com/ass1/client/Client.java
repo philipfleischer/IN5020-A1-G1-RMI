@@ -1,4 +1,6 @@
 package com.ass1.client;
+import com.ass1.common.Cache;
+import com.ass1.common.CacheKey;
 import com.ass1.proxy.ProxyInterface;
 import com.ass1.proxy.ServerLocation;
 import com.ass1.server.ServerInterface;
@@ -33,6 +35,10 @@ public class Client {
         Map<String, List<Long>> executionByMethod = new LinkedHashMap<>();
         Map<String, List<Long>> waitingByMethod = new LinkedHashMap<>();
 
+        // Client cache
+        final int MAX_CACHE_ENTRIES = 45; // task says client max entries is 45
+        Cache<String, Object> cache = new Cache<>(MAX_CACHE_ENTRIES, "FIFO");
+
         for (Query query : queries) {
             Thread.sleep(50); // T = 50ms between each query, T = 20ms for tests later
 
@@ -43,37 +49,79 @@ public class Client {
             // input file has a couple of these) must not take down the other ~3000 queries.
             // Catch anything that goes wrong for this single query, log it, and move on.
             try {
-                // Ask the proxy which server should actually handle this query's zone.
-                ServerLocation location = proxy.getServerForZone(query.zone);
 
-                // Simulate the extra distance cost of a neighbor-zone request (0ms if it's
-                // the same zone - see Proxy.toLocation()). The base 80ms network delay is
-                // already simulated server-side, inside Server.submitAndWait().
-                if (location.extraNetworkDelayMs > 0) {
-                    Thread.sleep(location.extraNetworkDelayMs);
+                // Make cachekey
+                String key = getCacheKey(query);
+
+                // check client cache
+                Object cachedResult = cache.get(key);
+
+                if (cachedResult != null) {
+                    // CACHE HIT, print results
+                    System.out.println("CLIENT CACHE HIT: " + key);
+
+                    long turnaroundTime = System.currentTimeMillis() - start;
+
+                    long executionTime = 0;
+                    long waitingTime = 0;
+
+                    outputLines.add(
+                            cachedResult + " " + query.rawLine
+                            + " (turnaround time: " + turnaroundTime
+                            + " ms, execution time: " + executionTime
+                            + " ms, waiting time: " + waitingTime
+                            + " ms)"
+                    );
+
+                    turnaroundByMethod
+                            .computeIfAbsent(query.methodName, k -> new ArrayList<>())
+                            .add(turnaroundTime);
+
+                    executionByMethod
+                            .computeIfAbsent(query.methodName, k -> new ArrayList<>())
+                            .add(executionTime);
+
+                    waitingByMethod
+                            .computeIfAbsent(query.methodName, k -> new ArrayList<>())
+                            .add(waitingTime);
+
+                } else {
+                    // CASHE MISS... continue
+                    // Ask the proxy which server should actually handle this query's zone.
+                    ServerLocation location = proxy.getServerForZone(query.zone);
+
+                    // Simulate the extra distance cost of a neighbor-zone request (0ms if it's
+                    // the same zone - see Proxy.toLocation()). The base 80ms network delay is
+                    // already simulated server-side, inside Server.submitAndWait().
+                    if (location.extraNetworkDelayMs > 0) {
+                        Thread.sleep(location.extraNetworkDelayMs);
+                    }
+
+                    // Connect to whichever server the proxy picked, and make the real call.
+                    // Bound as "Server-Zone-<zone>" - see Server.main().
+                    Registry serverRegistry = LocateRegistry.getRegistry(location.host, location.port);
+                    ServerInterface server = (ServerInterface) serverRegistry.lookup("Server-Zone-" + location.zone);
+                    QueryResult result = invoke(server, query);
+
+                    // add result to cache
+                    cache.put(key, result.getValue());
+
+                    long turnaroundTime = System.currentTimeMillis() - start;
+
+                    // Real waiting/execution time and the actual serving zone come straight from
+                    // the server's own QueryResult now, instead of being hardcoded to 0.
+                    long executionTime = result.getExecutionTimeMs();
+                    long waitingTime = result.getWaitingTimeMs();
+                    int servedByZone = result.getServedByZone();
+
+                    outputLines.add(result.getValue() + " " + query.rawLine
+                            + " (turnaround time: " + turnaroundTime + " ms, execution time: " + executionTime
+                            + " ms, waiting time: " + waitingTime + " ms, processed by Server " + servedByZone + ")");
+
+                    turnaroundByMethod.computeIfAbsent(query.methodName, k -> new ArrayList<>()).add(turnaroundTime);
+                    executionByMethod.computeIfAbsent(query.methodName, k -> new ArrayList<>()).add(executionTime);
+                    waitingByMethod.computeIfAbsent(query.methodName, k -> new ArrayList<>()).add(waitingTime);
                 }
-
-                // Connect to whichever server the proxy picked, and make the real call.
-                // Bound as "Server-Zone-<zone>" - see Server.main().
-                Registry serverRegistry = LocateRegistry.getRegistry(location.host, location.port);
-                ServerInterface server = (ServerInterface) serverRegistry.lookup("Server-Zone-" + location.zone);
-                QueryResult result = invoke(server, query);
-
-                long turnaroundTime = System.currentTimeMillis() - start;
-
-                // Real waiting/execution time and the actual serving zone come straight from
-                // the server's own QueryResult now, instead of being hardcoded to 0.
-                long executionTime = result.getExecutionTimeMs();
-                long waitingTime = result.getWaitingTimeMs();
-                int servedByZone = result.getServedByZone();
-
-                outputLines.add(result.getValue() + " " + query.rawLine
-                        + " (turnaround time: " + turnaroundTime + " ms, execution time: " + executionTime
-                        + " ms, waiting time: " + waitingTime + " ms, processed by Server " + servedByZone + ")");
-
-                turnaroundByMethod.computeIfAbsent(query.methodName, k -> new ArrayList<>()).add(turnaroundTime);
-                executionByMethod.computeIfAbsent(query.methodName, k -> new ArrayList<>()).add(executionTime);
-                waitingByMethod.computeIfAbsent(query.methodName, k -> new ArrayList<>()).add(waitingTime);
             } catch (Exception e) {
                 // Still one output line per input line, per the assignment's format - just
                 // marked as an error instead of a real result, and left out of the avg/min/max
@@ -95,7 +143,7 @@ public class Client {
         }
 
         // Writes one line per query, then one avg/min/max summary line per method name
-        try (PrintWriter writer = new PrintWriter("naive_server.txt")) {
+        try (PrintWriter writer = new PrintWriter("client_cache.txt")) {
             for (String line : outputLines) {
                 writer.println(line);
             }
@@ -118,7 +166,7 @@ public class Client {
             }
         }
 
-        System.out.println("[CLIENT] --> Wrote: " + outputLines.size() + " results to naive_server.txt");
+        System.out.println("[CLIENT] --> Wrote: " + outputLines.size() + " results to client_cache.txt");
     }
 
     // The dispatch picks the matching remote method and pulls its arguments out of argTokens.
@@ -163,6 +211,73 @@ public class Client {
             }
 
             default -> throw new IllegalArgumentException("Unknown method: " + query.methodName);
+        }
+    }
+
+    // helper function to get the cache keys for each method
+    private static String getCacheKey(Query query) {
+
+        switch (query.methodName) {
+
+            case "getPopulationofCountry" -> {
+                String countryName = String.join(" ", query.argTokens);
+
+                return CacheKey.makeKey(
+                        query.methodName,
+                        countryName
+                );
+            }
+
+            case "getNumberofCities" -> {
+                String comp = query.argTokens[query.argTokens.length - 1];
+                int threshold = Integer.parseInt(
+                        query.argTokens[query.argTokens.length - 2]
+                );
+
+                String countryName = String.join(" ",
+                        Arrays.copyOfRange(
+                                query.argTokens,
+                                0,
+                                query.argTokens.length - 2
+                        ));
+
+                return CacheKey.makeKey(
+                        query.methodName,
+                        countryName,
+                        threshold,
+                        comp
+                );
+            }
+
+            case "getNumberofCountries" -> {
+                int cityCount = Integer.parseInt(query.argTokens[0]);
+                int threshold = Integer.parseInt(query.argTokens[1]);
+                String comp = query.argTokens[2];
+
+                return CacheKey.makeKey(
+                        query.methodName,
+                        cityCount,
+                        threshold,
+                        comp
+                );
+            }
+
+            case "getNumberofCountriesMM" -> {
+                int cityCount = Integer.parseInt(query.argTokens[0]);
+                int minPop = Integer.parseInt(query.argTokens[1]);
+                int maxPop = Integer.parseInt(query.argTokens[2]);
+
+                return CacheKey.makeKey(
+                        query.methodName,
+                        cityCount,
+                        minPop,
+                        maxPop
+                );
+            }
+
+            default -> throw new IllegalArgumentException(
+                    "Unknown method: " + query.methodName
+            );
         }
     }
 

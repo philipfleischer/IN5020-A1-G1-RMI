@@ -244,6 +244,11 @@ public class Server extends UnicastRemoteObject implements ServerInterface {
             int zone = args.length > 1 ? Integer.parseInt(args[1]) : 1;
             String datasetPath = args.length > 2 ? args[2] : "data/exercise_1_dataset.csv";
 
+            // Set by docker-compose; inside a container "localhost" is only the container itself.
+            String proxyHost = System.getenv().getOrDefault("PROXY_HOST", "localhost");
+            String serverHost = System.getenv().getOrDefault("SERVER_HOST", "localhost");
+            System.setProperty("java.rmi.server.hostname", serverHost);
+
             Server server = new Server(zone, datasetPath);
 
             Registry registry = LocateRegistry.createRegistry(port);
@@ -255,10 +260,10 @@ public class Server extends UnicastRemoteObject implements ServerInterface {
             // Tell the proxy we exist, so it can start sending clients our way. The proxy's
             // own registry always lives on a fixed port (1100), no matter which port/zone
             // this particular server instance is using.
-            Registry proxyRegistry = LocateRegistry.getRegistry("localhost", 1100);
+            Registry proxyRegistry = LocateRegistry.getRegistry(proxyHost, 1100);
             ProxyInterface proxy = (ProxyInterface) proxyRegistry.lookup("ProxyService");
 
-            boolean accepted = proxy.registerServer("localhost", port, zone);
+            boolean accepted = proxy.registerServer(serverHost, port, zone);
             if (!accepted) {
                 // Either the zone number is out of range, or another server already grabbed
                 // it first. We keep running anyway (still reachable directly), just flag it.

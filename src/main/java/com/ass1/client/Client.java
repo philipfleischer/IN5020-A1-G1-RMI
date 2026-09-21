@@ -22,10 +22,12 @@ public class Client {
     public static void main(String[] args) throws Exception {
         // Proxy is the only fixed address the client needs to know, and
         // every server adress comes as the proxy instead, per query
-        Registry proxyRegistry = LocateRegistry.getRegistry("localhost", 1100);
+        String proxyHost = System.getenv().getOrDefault("PROXY_HOST", "localhost");
+        Registry proxyRegistry = LocateRegistry.getRegistry(proxyHost, 1100);
         ProxyInterface proxy = (ProxyInterface) proxyRegistry.lookup("ProxyService");
 
-        List<Query> queries = Query.readQueries("input/exercise_1_input.txt");
+        String inputPath = args.length > 0 ? args[0] : "input/exercise_1_input.txt";
+        List<Query> queries = Query.readQueries(inputPath);
         System.out.println("[CLIENT] -- Loaded " + queries.size() + " queries.");
 
         List<String> outputLines = new ArrayList<>();

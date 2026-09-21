@@ -1,5 +1,7 @@
 package com.ass1.server;
 
+import com.ass1.common.Cache;
+import com.ass1.common.CacheKey;
 import com.ass1.proxy.ProxyInterface;
 
 import java.io.FileWriter;
@@ -37,11 +39,16 @@ public class Server extends UnicastRemoteObject implements ServerInterface {
     // Logs "timestamp,queueSize" on every queue change - used for the required graphs.
     private final PrintWriter queueLog;
 
+    // Server cache
+    private Cache<String, Object> cache;
+    private final int MAX_CACHE_ENTRIES = 150; // task says server max entries is 150
+
     public Server(int zone, String datasetPath) throws RemoteException, IOException {
         super(); // exports this object over RMI
         this.zone = zone;
         this.datasetPath = datasetPath;
         this.queueLog = new PrintWriter(new FileWriter("server_zone_" + zone + "_queue_log.txt", true));
+        this.cache = new Cache<>(MAX_CACHE_ENTRIES, "FIFO"); // fifo method when cache is full. Method can change to "OLDEST"
 
         // 2.4.c: two thread groups - one executes tasks, others accept new
         // tasks. The "accept" side is free (Java RMI's own thread pool);
@@ -115,8 +122,26 @@ public class Server extends UnicastRemoteObject implements ServerInterface {
     @Override
     public QueryResult getPopulationofCountry(String countryName) throws RemoteException {
         return submitAndWait(() -> {
+            String key = CacheKey.makeKey("getPopulationofCountry", countryName); // make key for the map
+
+            Object cachedResult = cache.get(key);
+
+            // CACHE HIT
+            if (cachedResult != null) {
+                System.out.println("CACHE HIT: " + key);
+                return cachedResult;
+            }
+
+            // CACHE MISS, continue without cache
+            System.out.println("CACHE MISS: " + key);
+
+
             List<CityRecord> cities = Dataset.parse(datasetPath);
-            return Dataset.getPopulationofCountry(cities, countryName);
+            long result = Dataset.getPopulationofCountry(cities, countryName);
+
+            cache.put(key, result);
+
+            return result;
         });
     }
 
@@ -124,8 +149,25 @@ public class Server extends UnicastRemoteObject implements ServerInterface {
     @Override
     public QueryResult getNumberofCities(String countryName, int threshold, String comp) throws RemoteException {
         return submitAndWait(() -> {
+            String key = CacheKey.makeKey("getNumberofCities", countryName, threshold, comp); // make key for the map
+
+            Object cachedResult = cache.get(key);
+
+            // CACHE HIT
+            if (cachedResult != null) {
+                System.out.println("CACHE HIT: " + key);
+                return cachedResult;
+            }
+
+            // CACHE MISS, continue without cache
+            System.out.println("CACHE MISS: " + key);
+
             List<CityRecord> cities = Dataset.parse(datasetPath);
-            return Dataset.getNumberofCities(cities, countryName, threshold, comp);
+            int result = Dataset.getNumberofCities(cities, countryName, threshold, comp);
+
+            cache.put(key, result);
+
+            return result;
         });
     }
 
@@ -133,8 +175,25 @@ public class Server extends UnicastRemoteObject implements ServerInterface {
     @Override
     public QueryResult getNumberofCountries(int cityCount, int threshold, String comp) throws RemoteException {
         return submitAndWait(() -> {
+            String key = CacheKey.makeKey("getNumberofCountries", cityCount, threshold, comp); // make key for the map
+
+            Object cachedResult = cache.get(key);
+
+            // CACHE HIT
+            if (cachedResult != null) {
+                System.out.println("CACHE HIT: " + key);
+                return cachedResult;
+            }
+
+            // CACHE MISS, continue without cache
+            System.out.println("CACHE MISS: " + key);
+
             List<CityRecord> cities = Dataset.parse(datasetPath);
-            return Dataset.getNumberofCountries(cities, cityCount, threshold, comp);
+            int result = Dataset.getNumberofCountries(cities, cityCount, threshold, comp);
+
+            cache.put(key, result);
+
+            return result;
         });
     }
 
@@ -142,8 +201,25 @@ public class Server extends UnicastRemoteObject implements ServerInterface {
     @Override
     public QueryResult getNumberofCountriesMM(int cityCount, int minPopulation, int maxPopulation) throws RemoteException {
         return submitAndWait(() -> {
+            String key = CacheKey.makeKey("getNumberofCountriesMM", cityCount, minPopulation, maxPopulation); // make key for the map
+
+            Object cachedResult = cache.get(key);
+
+            // CACHE HIT
+            if (cachedResult != null) {
+                System.out.println("CACHE HIT: " + key);
+                return cachedResult;
+            }
+
+            // CACHE MISS, continue without cache
+            System.out.println("CACHE MISS: " + key);
+
             List<CityRecord> cities = Dataset.parse(datasetPath);
-            return Dataset.getNumberofCountriesMM(cities, cityCount, minPopulation, maxPopulation);
+            int result = Dataset.getNumberofCountriesMM(cities, cityCount, minPopulation, maxPopulation);
+
+            cache.put(key, result);
+
+            return result;
         });
     }
 

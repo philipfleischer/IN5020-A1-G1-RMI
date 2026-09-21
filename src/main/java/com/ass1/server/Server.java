@@ -43,12 +43,15 @@ public class Server extends UnicastRemoteObject implements ServerInterface {
     private Cache<String, Object> cache;
     private final int MAX_CACHE_ENTRIES = 150; // task says server max entries is 150
 
-    public Server(int zone, String datasetPath) throws RemoteException, IOException {
+    // CacheMode is either "none", "FIFO" or "OLDEST". none means no server-side cache -> naive_server.txt
+    // Passed from main as args[3]
+    public Server(int zone, String datasetPath, String cacheMode) throws RemoteException, IOException {
         super(); // exports this object over RMI
         this.zone = zone;
         this.datasetPath = datasetPath;
         this.queueLog = new PrintWriter(new FileWriter("server_zone_" + zone + "_queue_log.txt", true));
-        this.cache = new Cache<>(MAX_CACHE_ENTRIES, "FIFO"); // fifo method when cache is full. Method can change to "OLDEST"
+        // Creating a cache if flag says to do so, skip past when it is null
+        this.cache = cacheMode.equalsIgnoreCase("none") ? null : new Cache<>(MAX_CACHE_ENTRIES, cacheMode);
 
         // 2.4.c: two thread groups - one executes tasks, others accept new
         // tasks. The "accept" side is free (Java RMI's own thread pool);
@@ -124,22 +127,22 @@ public class Server extends UnicastRemoteObject implements ServerInterface {
         return submitAndWait(() -> {
             String key = CacheKey.makeKey("getPopulationofCountry", countryName); // make key for the map
 
-            Object cachedResult = cache.get(key);
+            // cache == null -> skip
+            if (cache != null) {
+                Object cachedResult = cache.get(key);
 
-            // CACHE HIT
-            if (cachedResult != null) {
-                System.out.println("CACHE HIT: " + key);
-                return cachedResult;
+                // CACHE HIT
+                if (cachedResult != null) {
+                    return cachedResult;
+                }
             }
-
-            // CACHE MISS, continue without cache
-            System.out.println("CACHE MISS: " + key);
-
 
             List<CityRecord> cities = Dataset.parse(datasetPath);
             long result = Dataset.getPopulationofCountry(cities, countryName);
 
-            cache.put(key, result);
+            if (cache != null) {
+                cache.put(key, result);
+            }
 
             return result;
         });
@@ -151,21 +154,22 @@ public class Server extends UnicastRemoteObject implements ServerInterface {
         return submitAndWait(() -> {
             String key = CacheKey.makeKey("getNumberofCities", countryName, threshold, comp); // make key for the map
 
-            Object cachedResult = cache.get(key);
+            // cache == null -> skip
+            if (cache != null) {
+                Object cachedResult = cache.get(key);
 
-            // CACHE HIT
-            if (cachedResult != null) {
-                System.out.println("CACHE HIT: " + key);
-                return cachedResult;
+                // CACHE HIT
+                if (cachedResult != null) {
+                    return cachedResult;
+                }
             }
-
-            // CACHE MISS, continue without cache
-            System.out.println("CACHE MISS: " + key);
 
             List<CityRecord> cities = Dataset.parse(datasetPath);
             int result = Dataset.getNumberofCities(cities, countryName, threshold, comp);
 
-            cache.put(key, result);
+            if (cache != null) {
+                cache.put(key, result);
+            }
 
             return result;
         });
@@ -177,21 +181,22 @@ public class Server extends UnicastRemoteObject implements ServerInterface {
         return submitAndWait(() -> {
             String key = CacheKey.makeKey("getNumberofCountries", cityCount, threshold, comp); // make key for the map
 
-            Object cachedResult = cache.get(key);
+            // cache == null -> skip
+            if (cache != null) {
+                Object cachedResult = cache.get(key);
 
-            // CACHE HIT
-            if (cachedResult != null) {
-                System.out.println("CACHE HIT: " + key);
-                return cachedResult;
+                // CACHE HIT
+                if (cachedResult != null) {
+                    return cachedResult;
+                }
             }
-
-            // CACHE MISS, continue without cache
-            System.out.println("CACHE MISS: " + key);
 
             List<CityRecord> cities = Dataset.parse(datasetPath);
             int result = Dataset.getNumberofCountries(cities, cityCount, threshold, comp);
 
-            cache.put(key, result);
+            if (cache != null) {
+                cache.put(key, result);
+            }
 
             return result;
         });
@@ -203,21 +208,22 @@ public class Server extends UnicastRemoteObject implements ServerInterface {
         return submitAndWait(() -> {
             String key = CacheKey.makeKey("getNumberofCountriesMM", cityCount, minPopulation, maxPopulation); // make key for the map
 
-            Object cachedResult = cache.get(key);
+            // cache == null -> skip
+            if (cache != null) {
+                Object cachedResult = cache.get(key);
 
-            // CACHE HIT
-            if (cachedResult != null) {
-                System.out.println("CACHE HIT: " + key);
-                return cachedResult;
+                // CACHE HIT
+                if (cachedResult != null) {
+                    return cachedResult;
+                }
             }
-
-            // CACHE MISS, continue without cache
-            System.out.println("CACHE MISS: " + key);
 
             List<CityRecord> cities = Dataset.parse(datasetPath);
             int result = Dataset.getNumberofCountriesMM(cities, cityCount, minPopulation, maxPopulation);
 
-            cache.put(key, result);
+            if (cache != null) {
+                cache.put(key, result);
+            }
 
             return result;
         });
@@ -244,12 +250,15 @@ public class Server extends UnicastRemoteObject implements ServerInterface {
             int zone = args.length > 1 ? Integer.parseInt(args[1]) : 1;
             String datasetPath = args.length > 2 ? args[2] : "data/exercise_1_dataset.csv";
 
+            String cacheMode = args.length > 3 ? args[3] : "none";
+
             // Set by docker-compose; inside a container "localhost" is only the container itself.
             String proxyHost = System.getenv().getOrDefault("PROXY_HOST", "localhost");
             String serverHost = System.getenv().getOrDefault("SERVER_HOST", "localhost");
             System.setProperty("java.rmi.server.hostname", serverHost);
 
-            Server server = new Server(zone, datasetPath);
+            Server server = new Server(zone, datasetPath, cacheMode);
+            System.out.println("[SERVER] Cache mode: " + cacheMode);
 
             Registry registry = LocateRegistry.createRegistry(port);
             registry.rebind("Server-Zone-" + zone, server);

@@ -20,29 +20,46 @@ import java.util.Map;
 // Line parsing (Query.parseLine / Query.readQueries) lives in Query.java, next to this file.
 public class Client {
     public static void main(String[] args) throws Exception {
-        // Proxy is the only fixed address the client needs to know, and
-        // every server adress comes as the proxy instead, per query
-        String proxyHost = System.getenv().getOrDefault("PROXY_HOST", "localhost");
-        Registry proxyRegistry = LocateRegistry.getRegistry(proxyHost, 1100);
+        // First arg picks the run mode, -> decides client cache and output file call
+        // naive        -> NO client cache, NO server cache,  writes naive_server.txt
+        // server-cache -> NO client cache, Yes server cache, writes server_cache.txt
+        // client-cache -> YES client cache, YES server cache,  writes client_cache.txt
+
+        String mode = args.length > 0 ? args[0] : "naive";
+        // "FIFO" or "OLDEST"
+        String evictionMethod = args.length > 1 ? args[1] : "FIFO";
+
+        // T=50 or T=20
+        int delayMs = args.length > 2 ? Integer.parseInt(args[2]) : 50;
+
+        // Suffixed with the T value so a T=50 run and a T=20 run don't overwrite each
+        // other - we need both for the graphs, so losing one by accident would be annoying.
+        String outputFile = switch (mode) {
+            case "naive" -> "naive_server_T" + delayMs + ".txt";
+            case "server_cache" -> "server_cache_T" + delayMs + ".txt";
+            case "client_cache" -> "client_cache_T" + delayMs + ".txt";
+            default -> throw new IllegalArgumentException("Unknown mode: " + mode + " (expected naive/server_cache/client_cache)");
+        };
+
+        boolean clientCacheEnabled = mode.equals("client_cache");
+
+        Registry proxyRegistry = LocateRegistry.getRegistry("localhost", 1100);
         ProxyInterface proxy = (ProxyInterface) proxyRegistry.lookup("ProxyService");
 
-        String inputPath = args.length > 0 ? args[0] : "input/exercise_1_input.txt";
-        List<Query> queries = Query.readQueries(inputPath);
-        System.out.println("[CLIENT] -- Loaded " + queries.size() + " queries.");
+        List<Query> queries = Query.readQueries("input/exercise_1_input.txt");
+        System.out.println("[CLIENT] -- Loaded " + queries.size() + " queries. Mode: " + mode);
 
         List<String> outputLines = new ArrayList<>();
-        // Turnaround/execution/waiting times per method name, used to build
-        // the avg/min/max summary lines below.
         Map<String, List<Long>> turnaroundByMethod = new LinkedHashMap<>();
         Map<String, List<Long>> executionByMethod = new LinkedHashMap<>();
         Map<String, List<Long>> waitingByMethod = new LinkedHashMap<>();
 
         // Client cache
         final int MAX_CACHE_ENTRIES = 45; // task says client max entries is 45
-        Cache<String, Object> cache = new Cache<>(MAX_CACHE_ENTRIES, "FIFO");
+        Cache<String, Object> cache = clientCacheEnabled ? new Cache<>(MAX_CACHE_ENTRIES, evictionMethod) : null;
 
         for (Query query : queries) {
-            Thread.sleep(50); // T = 50ms between each query, T = 20ms for tests later
+            Thread.sleep(delayMs); // T = 50ms or T = 20ms between each query, picked via args[2]
 
             // Time the remote call itself -> this is the query's turnaround time.
             long start = System.currentTimeMillis();
@@ -56,7 +73,7 @@ public class Client {
                 String key = getCacheKey(query);
 
                 // check client cache
-                Object cachedResult = cache.get(key);
+                Object cachedResult = (cache != null) ? cache.get(key) : null;
 
                 if (cachedResult != null) {
                     // CACHE HIT, print results
@@ -72,7 +89,7 @@ public class Client {
                             + " (turnaround time: " + turnaroundTime
                             + " ms, execution time: " + executionTime
                             + " ms, waiting time: " + waitingTime
-                            + " ms)"
+                            + " ms, processed by Server cache)"
                     );
 
                     turnaroundByMethod
@@ -105,8 +122,11 @@ public class Client {
                     ServerInterface server = (ServerInterface) serverRegistry.lookup("Server-Zone-" + location.zone);
                     QueryResult result = invoke(server, query);
 
-                    // add result to cache
-                    cache.put(key, result.getValue());
+                    // cache == null -> skip
+                    if (cache != null) {
+                        // add result to cache
+                        cache.put(key, result.getValue());
+                    }
 
                     long turnaroundTime = System.currentTimeMillis() - start;
 
@@ -145,7 +165,7 @@ public class Client {
         }
 
         // Writes one line per query, then one avg/min/max summary line per method name
-        try (PrintWriter writer = new PrintWriter("client_cache.txt")) {
+        try (PrintWriter writer = new PrintWriter(outputFile)) {
             for (String line : outputLines) {
                 writer.println(line);
             }
@@ -168,7 +188,7 @@ public class Client {
             }
         }
 
-        System.out.println("[CLIENT] --> Wrote: " + outputLines.size() + " results to client_cache.txt");
+        System.out.println("[CLIENT] --> Wrote: " + outputLines.size() + " results to " + outputFile);
     }
 
     // The dispatch picks the matching remote method and pulls its arguments out of argTokens.

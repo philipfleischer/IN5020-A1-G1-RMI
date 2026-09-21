@@ -1,0 +1,82 @@
+x-server: &server
+  build: .
+  image: in5020-a1-g1
+  volumes:
+    - ./out:/app/out:z
+  depends_on:
+    proxy:
+      condition: service_healthy
+
+services:
+  proxy:
+    build: .
+    image: in5020-a1-g1
+    command: ["com.ass1.proxy.Main"]
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/1100"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  # SERVER_HOST is the name the server registers with at the proxy and puts in its RMI stub
+  server1:
+    <<: *server
+    command: ["com.ass1.server.Server", "2001", "1", "/app/data/exercise_1_dataset.csv"]
+    environment: { PROXY_HOST: proxy, SERVER_HOST: server1 }
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/2001"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+  server2:
+    <<: *server
+    command: ["com.ass1.server.Server", "2002", "2", "/app/data/exercise_1_dataset.csv"]
+    environment: { PROXY_HOST: proxy, SERVER_HOST: server2 }
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/2002"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+  server3:
+    <<: *server
+    command: ["com.ass1.server.Server", "2003", "3", "/app/data/exercise_1_dataset.csv"]
+    environment: { PROXY_HOST: proxy, SERVER_HOST: server3 }
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/2003"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+  server4:
+    <<: *server
+    command: ["com.ass1.server.Server", "2004", "4", "/app/data/exercise_1_dataset.csv"]
+    environment: { PROXY_HOST: proxy, SERVER_HOST: server4 }
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/2004"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+  server5:
+    <<: *server
+    command: ["com.ass1.server.Server", "2005", "5", "/app/data/exercise_1_dataset.csv"]
+    environment: { PROXY_HOST: proxy, SERVER_HOST: server5 }
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/2005"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  client:
+    build: .
+    image: in5020-a1-g1
+    command: ["com.ass1.client.Client", "/app/input/exercise_1_input.txt"]
+    environment:
+      PROXY_HOST: proxy
+    volumes:
+      - ./out:/app/out:z
+    profiles: ["client"]
+    depends_on:
+      server1: { condition: service_healthy }
+      server2: { condition: service_healthy }
+      server3: { condition: service_healthy }
+      server4: { condition: service_healthy }
+      server5: { condition: service_healthy }

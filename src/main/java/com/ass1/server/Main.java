@@ -1,33 +1,55 @@
 package com.ass1.server;
 
+import com.ass1.proxy.ProxyInterface;
+
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 
 /**
- * Starting one Server instance:
- *  1) Starting a RMI-Registry
- *  2) Registrering the server under a name or id in the register.
+ * Starts one Server instance:
+ *  1) Register with the proxy, telling it which zone we want to be.
+ *  2) If the proxy accepts (zone was free), start our own RMI registry
+ *     and bind ourselves under "Server-Zone-<zone>" - that's the name
+ *     both the Client and the Proxy's background load-refresh look us
+ *     up by (see Proxy.refreshLoad()).
  *
- * Note: the dataset is no longer loaded once here - Server itself calls
- * Dataset.parse(datasetPath) fresh on every single query (naive mode,
- * matching "parses the whole dataset every time a request is made").
- *
- * TODo: Change from manual static port to the proxy servers port (once the Proxy exists)
+ * Usage: java com.ass1.server.Main <zone> [port] [datasetPath] [cacheMode]
+ * cacheMode is "none", "FIFO", or "OLDEST" - see Server.java.
  */
 public class Main {
+    private static final String PROXY_HOST = "localhost";
+    private static final int PROXY_PORT = 1100; // matches proxy/Main.java
+
     public static void main(String[] args) throws Exception {
-        // TODo: take datasetPath/port as args instead of hardcoding, once we need more than one server
+        if (args.length < 1) {
+            System.out.println("Usage: java com.ass1.server.Main <zone> [port] [datasetPath] [cacheMode]");
+            return;
+        }
 
-        String datasetPath = "data/exercise_1_dataset.csv";
-        int port = 1099; // A standard RMI port
-        int zone = 1;    // single-server naive setup for now, before the proxy assigns real zones
+        int zone = Integer.parseInt(args[0]);
+        int myPort = args.length > 1 ? Integer.parseInt(args[1]) : 1099;
+        String datasetPath = args.length > 2 ? args[2] : "data/exercise_1_dataset.csv";
+        String cacheMode = args.length > 3 ? args[3] : "none";
+        String myHost = "localhost";
 
-        Server server = new Server(zone, datasetPath);
+        // 1) Ask the proxy to claim this zone for us.
+        Registry proxyRegistry = LocateRegistry.getRegistry(PROXY_HOST, PROXY_PORT);
+        ProxyInterface proxy = (ProxyInterface) proxyRegistry.lookup("ProxyService");
+        boolean accepted = proxy.registerServer(myHost, myPort, zone);
 
-        // "StatisticsServer" is the name Client.java looks this stub up by.
-        Registry registry = LocateRegistry.createRegistry(port);
-        registry.rebind("StatisticsServer", server);
+        if (!accepted) {
+            System.out.println("Proxy rejected zone " + zone + " (out of range or already taken). Exiting.");
+            return;
+        }
+        System.out.println("Registered with proxy for zone " + zone);
 
-        System.out.println("Server running and waiting on call, port " + port);
+        // 2) Create the server and start serving.
+        Server server = new Server(zone, datasetPath, cacheMode);
+
+        Registry myRegistry = LocateRegistry.createRegistry(myPort);
+        myRegistry.rebind("Server-Zone-" + zone, server);
+
+        System.out.println("Server for zone " + zone + " running on port " + myPort
+                + " (cache: " + cacheMode + ")...");
     }
 }

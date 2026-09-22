@@ -1,5 +1,9 @@
 package com.ass1.server;
 
+import com.ass1.common.Cache;
+import com.ass1.common.CacheKey;
+import com.ass1.proxy.ProxyInterface;
+
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -35,11 +39,19 @@ public class Server extends UnicastRemoteObject implements ServerInterface {
     // Logs "timestamp,queueSize" on every queue change - used for the required graphs.
     private final PrintWriter queueLog;
 
-    public Server(int zone, String datasetPath) throws RemoteException, IOException {
+    // Server cache
+    private Cache<String, Object> cache;
+    private final int MAX_CACHE_ENTRIES = 150; // task says server max entries is 150
+
+    // CacheMode is either "none", "FIFO" or "OLDEST". none means no server-side cache -> naive_server.txt
+    // Passed from main as args[3]
+    public Server(int zone, String datasetPath, String cacheMode) throws RemoteException, IOException {
         super(); // exports this object over RMI
         this.zone = zone;
         this.datasetPath = datasetPath;
         this.queueLog = new PrintWriter(new FileWriter("server_zone_" + zone + "_queue_log.txt", true));
+        // Creating a cache if flag says to do so, skip past when it is null
+        this.cache = cacheMode.equalsIgnoreCase("none") ? null : new Cache<>(MAX_CACHE_ENTRIES, cacheMode);
 
         // 2.4.c: two thread groups - one executes tasks, others accept new
         // tasks. The "accept" side is free (Java RMI's own thread pool);
@@ -113,8 +125,26 @@ public class Server extends UnicastRemoteObject implements ServerInterface {
     @Override
     public QueryResult getPopulationofCountry(String countryName) throws RemoteException {
         return submitAndWait(() -> {
+            String key = CacheKey.makeKey("getPopulationofCountry", countryName); // make key for the map
+
+            // cache == null -> skip
+            if (cache != null) {
+                Object cachedResult = cache.get(key);
+
+                // CACHE HIT
+                if (cachedResult != null) {
+                    return cachedResult;
+                }
+            }
+
             List<CityRecord> cities = Dataset.parse(datasetPath);
-            return Dataset.getPopulationofCountry(cities, countryName);
+            long result = Dataset.getPopulationofCountry(cities, countryName);
+
+            if (cache != null) {
+                cache.put(key, result);
+            }
+
+            return result;
         });
     }
 
@@ -122,8 +152,26 @@ public class Server extends UnicastRemoteObject implements ServerInterface {
     @Override
     public QueryResult getNumberofCities(String countryName, int threshold, String comp) throws RemoteException {
         return submitAndWait(() -> {
+            String key = CacheKey.makeKey("getNumberofCities", countryName, threshold, comp); // make key for the map
+
+            // cache == null -> skip
+            if (cache != null) {
+                Object cachedResult = cache.get(key);
+
+                // CACHE HIT
+                if (cachedResult != null) {
+                    return cachedResult;
+                }
+            }
+
             List<CityRecord> cities = Dataset.parse(datasetPath);
-            return Dataset.getNumberofCities(cities, countryName, threshold, comp);
+            int result = Dataset.getNumberofCities(cities, countryName, threshold, comp);
+
+            if (cache != null) {
+                cache.put(key, result);
+            }
+
+            return result;
         });
     }
 
@@ -131,8 +179,26 @@ public class Server extends UnicastRemoteObject implements ServerInterface {
     @Override
     public QueryResult getNumberofCountries(int cityCount, int threshold, String comp) throws RemoteException {
         return submitAndWait(() -> {
+            String key = CacheKey.makeKey("getNumberofCountries", cityCount, threshold, comp); // make key for the map
+
+            // cache == null -> skip
+            if (cache != null) {
+                Object cachedResult = cache.get(key);
+
+                // CACHE HIT
+                if (cachedResult != null) {
+                    return cachedResult;
+                }
+            }
+
             List<CityRecord> cities = Dataset.parse(datasetPath);
-            return Dataset.getNumberofCountries(cities, cityCount, threshold, comp);
+            int result = Dataset.getNumberofCountries(cities, cityCount, threshold, comp);
+
+            if (cache != null) {
+                cache.put(key, result);
+            }
+
+            return result;
         });
     }
 
@@ -140,8 +206,26 @@ public class Server extends UnicastRemoteObject implements ServerInterface {
     @Override
     public QueryResult getNumberofCountriesMM(int cityCount, int minPopulation, int maxPopulation) throws RemoteException {
         return submitAndWait(() -> {
+            String key = CacheKey.makeKey("getNumberofCountriesMM", cityCount, minPopulation, maxPopulation); // make key for the map
+
+            // cache == null -> skip
+            if (cache != null) {
+                Object cachedResult = cache.get(key);
+
+                // CACHE HIT
+                if (cachedResult != null) {
+                    return cachedResult;
+                }
+            }
+
             List<CityRecord> cities = Dataset.parse(datasetPath);
-            return Dataset.getNumberofCountriesMM(cities, cityCount, minPopulation, maxPopulation);
+            int result = Dataset.getNumberofCountriesMM(cities, cityCount, minPopulation, maxPopulation);
+
+            if (cache != null) {
+                cache.put(key, result);
+            }
+
+            return result;
         });
     }
 
@@ -166,7 +250,15 @@ public class Server extends UnicastRemoteObject implements ServerInterface {
             int zone = args.length > 1 ? Integer.parseInt(args[1]) : 1;
             String datasetPath = args.length > 2 ? args[2] : "data/exercise_1_dataset.csv";
 
-            Server server = new Server(zone, datasetPath);
+            String cacheMode = args.length > 3 ? args[3] : "none";
+
+            // Set by docker-compose; inside a container "localhost" is only the container itself.
+            String proxyHost = System.getenv().getOrDefault("PROXY_HOST", "localhost");
+            String serverHost = System.getenv().getOrDefault("SERVER_HOST", "localhost");
+            System.setProperty("java.rmi.server.hostname", serverHost);
+
+            Server server = new Server(zone, datasetPath, cacheMode);
+            System.out.println("[SERVER] Cache mode: " + cacheMode);
 
             Registry registry = LocateRegistry.createRegistry(port);
             registry.rebind("Server-Zone-" + zone, server);
@@ -174,8 +266,20 @@ public class Server extends UnicastRemoteObject implements ServerInterface {
             System.out.println("Server for zone " + zone + " running on port " + port + "...");
             System.out.println("Bound as 'Server-Zone-" + zone + "' in the RMI registry.");
 
-            // TODO: once ProxyInterface is ready, call
-            // proxy.registerServer(myHost, port) here.
+            // Tell the proxy we exist, so it can start sending clients our way. The proxy's
+            // own registry always lives on a fixed port (1100), no matter which port/zone
+            // this particular server instance is using.
+            Registry proxyRegistry = LocateRegistry.getRegistry(proxyHost, 1100);
+            ProxyInterface proxy = (ProxyInterface) proxyRegistry.lookup("ProxyService");
+
+            boolean accepted = proxy.registerServer(serverHost, port, zone);
+            if (!accepted) {
+                // Either the zone number is out of range, or another server already grabbed
+                // it first. We keep running anyway (still reachable directly), just flag it.
+                System.out.println("[SERVER] WARNING: proxy rejected zone " + zone + " - already taken or out of range?");
+            } else {
+                System.out.println("[SERVER] Registered with proxy as zone " + zone);
+            }
 
         } catch (Exception e) {
             e.printStackTrace();

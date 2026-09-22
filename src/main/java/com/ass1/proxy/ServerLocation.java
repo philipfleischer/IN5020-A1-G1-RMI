@@ -9,9 +9,14 @@ public class ServerLocation implements Serializable {
     public final int port;
     public final int zone;
 
-    public ServerLocation(String host, int port, int zone) {
+    // Milliseconds client should simulate in addition to 80ms network delay, based on "distance".
+    // Formula: same zone = 80ms total, neighbour zone = 80 + X*30 ms
+    public final int extraNetworkDelayMs;
+
+    public ServerLocation(String host, int port, int zone, int extraNetworkDelayMs) {
         this.host = host;
         this.port = port;
         this.zone = zone;
+        this.extraNetworkDelayMs = extraNetworkDelayMs;
     }
 }

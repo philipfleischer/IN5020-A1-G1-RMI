@@ -6,12 +6,12 @@
 
 CP="target/classes"
 DATASET="data/exercise_1_dataset.csv"
-PORT=2000
-ZONE=1
+BASE_PORT=2000
+NUM_ZONES=5
 
 # columns: mode  server_cache_mode  eviction  delay(T)
 # mode/eviction/delay get passed straight to Client.java's args.
-# server_cache_mode gets passed to Server.java's cache-mode arg (args[3]).
+# server_cache_mode gets passed to Server.java's cache-mode arg (args[2]).
 CONFIGS=(
   "naive        none   FIFO   50"
   "naive        none   FIFO   20"
@@ -44,15 +44,24 @@ run_one() {
     echo "=== [$(date +%H:%M:%S)] Running: $tag ==="
 
     stop_everything
-    # the queue log file is opened in APPEND mode by Server.java, so without
-    # deleting it first, this run's graph would include every previous run's
-    # queue data mixed in too - not what we want, each config needs its own log.
-    rm -f "server_zone_${ZONE}_queue_log.txt"
+    # The queue log files are opened in APPEND mode by Server.java, so without
+    # deleting them first, this run's graphs would include every previous run's
+    # queue data mixed in too - not what we want, each config needs its own logs.
+    rm -f server_zone_*_queue_log.txt
 
     java -cp "$CP" com.ass1.proxy.Main > "output/logs/proxy_${tag}.log" 2>&1 &
     sleep 2
-    java -cp "$CP" com.ass1.server.Server $PORT $ZONE "$DATASET" "$server_mode" > "output/logs/server_${tag}.log" 2>&1 &
-    sleep 3
+
+    # Zone numbers are no longer picked here - the Proxy hands each server a
+    # zone (ascending) as it registers. We just start NUM_ZONES server
+    # processes on distinct ports and let that happen.
+    for i in $(seq 1 "$NUM_ZONES"); do
+        port=$((BASE_PORT + i))
+        java -cp "$CP" com.ass1.server.Server "$port" "$DATASET" "$server_mode" \
+            > "output/logs/server${i}_${tag}.log" 2>&1 &
+    done
+    # More servers to boot than before, so give registration a bit more time.
+    sleep 6
 
     # runs in the foreground on purpose - waits for all ~3166 queries to finish
     # before we move on to starting the next config
@@ -75,14 +84,22 @@ run_one() {
         echo "!! WARNING: expected output file ${base}_T${delay}.txt was not created - something failed, check output/logs/"
     fi
 
-    if [ -f "server_zone_${ZONE}_queue_log.txt" ]; then
-        mv "server_zone_${ZONE}_queue_log.txt" "output/${tag}_queue_log.txt"
-    fi
+    # One queue log per zone server now (server_zone_1_queue_log.txt .. _5_), not
+    # just one - move each into output/ tagged with both the run and its zone,
+    # so plot_graphs.py (which just globs *_queue_log.txt) picks up all of them.
+    for f in server_zone_*_queue_log.txt; do
+        [ -f "$f" ] || continue
+        zone=$(echo "$f" | grep -oE '[0-9]+' | head -1)
+        mv "$f" "output/${tag}_zone${zone}_queue_log.txt"
+    done
 
     stop_everything
 }
 
-mkdir -p output/logs
+mkdir -p output/logs output/graphs
+echo "Clearing old results from output/ (so nothing stale from a previous run is left behind)..."
+rm -f output/*.txt output/graphs/*.png output/logs/*.log
+
 echo "Compiling..."
 mvn -q clean compile
 

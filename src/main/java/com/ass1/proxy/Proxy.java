@@ -38,34 +38,28 @@ public class Proxy extends UnicastRemoteObject implements ProxyInterface {
     // Without synchronized, two servers could both read nextZoneNumber before either one
     // increments it and end up getting handed the same zone number, which would break everything.
     @Override
-    public synchronized boolean registerServer(String host, int port, int zone) throws RemoteException {
-        if (zone < 1 || zone > TOTAL_ZONES) {
+    public synchronized int registerServer(String host, int port) throws RemoteException {
+        if (nextZoneNumber > TOTAL_ZONES) {
             System.out.println("[PROXY] - Rejected server " + host + ":" + port
-                    + " - zone " + zone + " is outside the valid range (1-" + TOTAL_ZONES + ").");
-            return false;
+                    + " - every zone (1-" + TOTAL_ZONES + ") is already taken.");
+            return -1;
         }
 
-        if (serversByZone.containsKey(zone)) {
-            System.out.println("[PROXY] - Rejected server " + host + ":" + port
-                + " - zone " + zone + " is already taken!"
-            );
-            return false;
-        }
-
+        int zone = nextZoneNumber++;
         ServerEntry entry = new ServerEntry(host, port, zone);
         serversByZone.put(zone, entry);
 
         System.out.println("[PROXY] - New server registered: " + host + ":" + port + " -> zone " + zone);
 
-        return true;
+        return zone;
     }
 
     @Override
     public ServerLocation getServerForZone(int zone) throws RemoteException {
-        // TODo: this is the main decision logic described in the assignment (section "1 Proxy Server").
+        // Main decision logic described in the assignment (section "1 Proxy Server").
         // Steps:
         //   1) fix up "zone" with resolveZone(), in case nobody registered there
-        //   2) if that zones server is nit overloaded, just send the client there
+        //   2) if that zones server is not overloaded, just send the client there
         //   3) if it is overloaded, check every other server and pick whichever has the
         //      fewest requests waiting, and break ties by picking whoever is closest clockwise
         //   4) if literally every server is overloaded, fall back to the original zone anyway
@@ -89,7 +83,7 @@ public class Proxy extends UnicastRemoteObject implements ProxyInterface {
 
         // Step 3: Home server is overloaded, we choose the one with least load/requests in queue.
         // If multiple have the same minimum load, then we choose the one physically closest
-        ServerEntry bestCanditate = null;
+        ServerEntry bestCandidate = null;
 
         for (ServerEntry candidate : serversByZone.values()) {
             if (candidate == homeServer) {
@@ -99,19 +93,19 @@ public class Proxy extends UnicastRemoteObject implements ProxyInterface {
                 continue; // Overloaded as well, so we skip
             }
 
-            boolean isBetter = bestCanditate == null
-                    || candidate.lastKnownQueueLength < bestCanditate.lastKnownQueueLength
-                    || (candidate.lastKnownQueueLength == bestCanditate.lastKnownQueueLength
+            boolean isBetter = bestCandidate == null
+                    || candidate.lastKnownQueueLength < bestCandidate.lastKnownQueueLength
+                    || (candidate.lastKnownQueueLength == bestCandidate.lastKnownQueueLength
                             && distanceClockwise(actualZone, candidate.zone) < distanceClockwise(actualZone,
-                                    bestCanditate.zone));
+                                    bestCandidate.zone));
 
             if (isBetter) {
-                bestCanditate = candidate;
+                bestCandidate = candidate;
             }
         }
 
         // Step 4: Every server is currently overloaded, so we fall back to the original server we first started with for the process´s zone
-        ServerEntry chosen = (bestCanditate != null) ? bestCanditate : homeServer;
+        ServerEntry chosen = (bestCandidate != null) ? bestCandidate : homeServer;
 
         maybeRefreshLoad(chosen);
         return toLocation(chosen, zone);
@@ -199,19 +193,6 @@ public class Proxy extends UnicastRemoteObject implements ProxyInterface {
             // rather than crashing the whole proxy over one failed background refresh.
             System.out.println("[PROXY] - WARNING: failed to refresh load for zone " + entry.zone
                     + ": " + e.getMessage());
-        }
-    }
-
-    //TODo: fjern midlertidig test klasse før levering
-    // TEST-ONLY HOOK: lets our manual test class fake a queue length for a zone,
-    // without needing a real Server object or real RMI calls. Production code (the
-    // real maybeRefreshLoad, once it's implemented) will set this the proper way,
-    // by actually calling the server. This method should never be called from
-    // anywhere except test code.
-    void forceQueueLengthForTesting(int zone, int queueLength) {
-        ServerEntry entry = serversByZone.get(zone);
-        if (entry != null) {
-            entry.lastKnownQueueLength = queueLength;
         }
     }
 }

@@ -241,21 +241,36 @@ public class Server extends UnicastRemoteObject implements ServerInterface {
         return zone;
     }
 
-    // 2.2.a: port/zone come from args[] instead of being hardcoded, so
-    // several Server instances can run at once, each with its own port
-    // and unique registry name.
+    // 2.2.a: port comes from args[] instead of being hardcoded, so several Server
+    // instances can run at once, each with its own port and unique registry name.
+    // The zone itself is no longer picked here - the Proxy assigns it (ascending
+    // order, on registration), per the assignment's description of the Proxy's
+    // registration API.
     public static void main(String[] args) {
         try {
             int port = args.length > 0 ? Integer.parseInt(args[0]) : 2000;
-            int zone = args.length > 1 ? Integer.parseInt(args[1]) : 1;
-            String datasetPath = args.length > 2 ? args[2] : "data/exercise_1_dataset.csv";
-
-            String cacheMode = args.length > 3 ? args[3] : "none";
+            String datasetPath = args.length > 1 ? args[1] : "data/exercise_1_dataset.csv";
+            String cacheMode = args.length > 2 ? args[2] : "none";
 
             // Set by docker-compose; inside a container "localhost" is only the container itself.
             String proxyHost = System.getenv().getOrDefault("PROXY_HOST", "localhost");
             String serverHost = System.getenv().getOrDefault("SERVER_HOST", "localhost");
             System.setProperty("java.rmi.server.hostname", serverHost);
+
+            // Register with the proxy first and let it tell us which zone we are -
+            // the proxy's own registry always lives on a fixed port (1100), no matter
+            // which port this particular server instance is using.
+            Registry proxyRegistry = LocateRegistry.getRegistry(proxyHost, 1100);
+            ProxyInterface proxy = (ProxyInterface) proxyRegistry.lookup("ProxyService");
+
+            int zone = proxy.registerServer(serverHost, port);
+            if (zone <= 0) {
+                // Every zone (1..TOTAL_ZONES) is already taken - nothing useful this
+                // server instance can do, so it does not start at all.
+                System.out.println("[SERVER] FATAL: proxy rejected registration - no zones left. Exiting.");
+                return;
+            }
+            System.out.println("[SERVER] Registered with proxy as zone " + zone);
 
             Server server = new Server(zone, datasetPath, cacheMode);
             System.out.println("[SERVER] Cache mode: " + cacheMode);
@@ -265,21 +280,6 @@ public class Server extends UnicastRemoteObject implements ServerInterface {
 
             System.out.println("Server for zone " + zone + " running on port " + port + "...");
             System.out.println("Bound as 'Server-Zone-" + zone + "' in the RMI registry.");
-
-            // Tell the proxy we exist, so it can start sending clients our way. The proxy's
-            // own registry always lives on a fixed port (1100), no matter which port/zone
-            // this particular server instance is using.
-            Registry proxyRegistry = LocateRegistry.getRegistry(proxyHost, 1100);
-            ProxyInterface proxy = (ProxyInterface) proxyRegistry.lookup("ProxyService");
-
-            boolean accepted = proxy.registerServer(serverHost, port, zone);
-            if (!accepted) {
-                // Either the zone number is out of range, or another server already grabbed
-                // it first. We keep running anyway (still reachable directly), just flag it.
-                System.out.println("[SERVER] WARNING: proxy rejected zone " + zone + " - already taken or out of range?");
-            } else {
-                System.out.println("[SERVER] Registered with proxy as zone " + zone);
-            }
 
         } catch (Exception e) {
             e.printStackTrace();

@@ -12,4 +12,4 @@ COPY input /app/input
 # output files (queue logs, client results) are written to the working directory
 WORKDIR /app/out
 ENTRYPOINT ["java", "-cp", "/app/solution.jar"]
-CMD ["com.ass1.server.Server", "2001", "1", "/app/data/exercise_1_dataset.csv"]
+CMD ["com.ass1.server.Server", "2001", "/app/data/exercise_1_dataset.csv"]

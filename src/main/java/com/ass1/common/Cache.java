@@ -16,8 +16,11 @@ public class Cache<K, V> {
         this.cache = new LinkedHashMap<>();
     }
 
-    // get an entry from the cache
-    public V get(K key) {
+    // synchronized: the server side only ever touches this from its one execution
+    // thread, but the client now fires off queries concurrently (see Client.java),
+    // so several threads can call get()/put() on the same client-side cache at once.
+    // Plain LinkedHashMap is not thread-safe under concurrent access.
+    public synchronized V get(K key) {
         CacheEntry<V> entry = cache.get(key);
 
         // cache miss
@@ -56,7 +59,7 @@ public class Cache<K, V> {
     }
 
     // if full -> oldest/first is deleted and newest is added
-    public void put(K key, V value) {
+    public synchronized void put(K key, V value) {
 
         if (!cache.containsKey(key) && cache.size() >= maxEntries) {
 
@@ -72,7 +75,7 @@ public class Cache<K, V> {
     }
 
     // returns true or false if a entry is in the cache
-    public boolean contains(K key) {
+    public synchronized boolean contains(K key) {
         return cache.containsKey(key);
     }
 }

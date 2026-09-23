@@ -21,7 +21,7 @@ services:
   # SERVER_HOST is the name the server registers with at the proxy and puts in its RMI stub
   server1:
     <<: *server
-    command: ["com.ass1.server.Server", "2001", "1", "/app/data/exercise_1_dataset.csv"]
+    command: ["com.ass1.server.Server", "2001", "/app/data/exercise_1_dataset.csv"]
     environment: { PROXY_HOST: proxy, SERVER_HOST: server1 }
     healthcheck:
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/2001"]
@@ -30,7 +30,7 @@ services:
       retries: 30
   server2:
     <<: *server
-    command: ["com.ass1.server.Server", "2002", "2", "/app/data/exercise_1_dataset.csv"]
+    command: ["com.ass1.server.Server", "2002", "/app/data/exercise_1_dataset.csv"]
     environment: { PROXY_HOST: proxy, SERVER_HOST: server2 }
     healthcheck:
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/2002"]
@@ -39,7 +39,7 @@ services:
       retries: 30
   server3:
     <<: *server
-    command: ["com.ass1.server.Server", "2003", "3", "/app/data/exercise_1_dataset.csv"]
+    command: ["com.ass1.server.Server", "2003", "/app/data/exercise_1_dataset.csv"]
     environment: { PROXY_HOST: proxy, SERVER_HOST: server3 }
     healthcheck:
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/2003"]
@@ -48,7 +48,7 @@ services:
       retries: 30
   server4:
     <<: *server
-    command: ["com.ass1.server.Server", "2004", "4", "/app/data/exercise_1_dataset.csv"]
+    command: ["com.ass1.server.Server", "2004", "/app/data/exercise_1_dataset.csv"]
     environment: { PROXY_HOST: proxy, SERVER_HOST: server4 }
     healthcheck:
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/2004"]
@@ -57,7 +57,7 @@ services:
       retries: 30
   server5:
     <<: *server
-    command: ["com.ass1.server.Server", "2005", "5", "/app/data/exercise_1_dataset.csv"]
+    command: ["com.ass1.server.Server", "2005", "/app/data/exercise_1_dataset.csv"]
     environment: { PROXY_HOST: proxy, SERVER_HOST: server5 }
     healthcheck:
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/2005"]
@@ -68,7 +68,9 @@ services:
   client:
     build: .
     image: in5020-a1-g1
-    command: ["com.ass1.client.Client", "/app/input/exercise_1_input.txt"]
+    # args are: mode (naive/server_cache/client_cache), eviction method (FIFO/OLDEST),
+    # T delay in ms, input file path - override this command to run a different combo
+    command: ["com.ass1.client.Client", "naive", "FIFO", "50", "/app/input/exercise_1_input.txt"]
     environment:
       PROXY_HOST: proxy
     volumes:

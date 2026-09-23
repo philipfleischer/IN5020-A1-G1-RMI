@@ -15,10 +15,40 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 // The client reads a input file, sends it to the server using RMI and writes results to an output file.
 // Line parsing (Query.parseLine / Query.readQueries) lives in Query.java, next to this file.
 public class Client {
+
+    // What one query produced, once it's done - filled in by whichever thread
+    // ran that query, then read back in input-file order on the main thread once
+    // every query has finished. methodName == null means the query failed (ERROR
+    // line) and must not be counted in the avg/min/max stats below.
+    private static class LineResult {
+        String outputLine;
+        String methodName;
+        long turnaround;
+        long execution;
+        long waiting;
+    }
+
+    // What we store in the client-side cache: the answer itself, plus which
+    // server originally produced it - needed so a cache hit can still print
+    // "processed by Server <server#>" per the assignment's output format,
+    // instead of a made-up placeholder.
+    private static class CachedAnswer {
+        final Object value;
+        final int servedByZone;
+
+        CachedAnswer(Object value, int servedByZone) {
+            this.value = value;
+            this.servedByZone = servedByZone;
+        }
+    }
+
     public static void main(String[] args) throws Exception {
         // First arg picks the run mode, -> decides client cache and output file call
         // naive        -> NO client cache, NO server cache,  writes naive_server.txt
@@ -32,6 +62,11 @@ public class Client {
         // T=50 or T=20
         int delayMs = args.length > 2 ? Integer.parseInt(args[2]) : 50;
 
+        // Optional 4th arg for the input file path, so the same jar/image can be pointed
+        // at a different file without editing code - matters inside Docker, where the
+        // container's working directory isn't the project root the local default assumes.
+        String inputPath = args.length > 3 ? args[3] : "input/exercise_1_input.txt";
+
         // Suffixed with the T value so a T=50 run and a T=20 run don't overwrite each
         // other - we need both for the graphs, so losing one by accident would be annoying.
         String outputFile = switch (mode) {
@@ -43,124 +78,58 @@ public class Client {
 
         boolean clientCacheEnabled = mode.equals("client_cache");
 
-        Registry proxyRegistry = LocateRegistry.getRegistry("localhost", 1100);
+        // Set by docker-compose to the proxy service's container name - "localhost" only
+        // works when everything runs on one machine, since inside a container "localhost"
+        // means that container itself, not wherever the proxy actually is.
+        String proxyHost = System.getenv().getOrDefault("PROXY_HOST", "localhost");
+        Registry proxyRegistry = LocateRegistry.getRegistry(proxyHost, 1100);
         ProxyInterface proxy = (ProxyInterface) proxyRegistry.lookup("ProxyService");
 
-        List<Query> queries = Query.readQueries("input/exercise_1_input.txt");
+        List<Query> queries = Query.readQueries(inputPath);
         System.out.println("[CLIENT] -- Loaded " + queries.size() + " queries. Mode: " + mode);
+
+        // Client cache
+        final int MAX_CACHE_ENTRIES = 45; // task says client max entries is 45
+        Cache<String, CachedAnswer> cache = clientCacheEnabled ? new Cache<>(MAX_CACHE_ENTRIES, evictionMethod) : null;
+
+        // One slot per query, filled in by whichever thread runs it. Indexing by
+        // the query's position (not appending as results come back) is what keeps
+        // the output file in the same order as the input file, even though queries
+        // now run concurrently and can finish in any order.
+        LineResult[] results = new LineResult[queries.size()];
+
+        // The assignment is explicit: "the next invocation must be delayed T
+        // milliseconds, regardless of whether the current invocation is finished or
+        // not". So each query gets handed to its own thread and we only sleep T ms
+        // between *starting* queries - we never wait for one to finish before firing
+        // the next. A cached thread pool grows/shrinks as needed and reuses threads
+        // once a query completes.
+        ExecutorService executor = Executors.newCachedThreadPool();
+
+        for (int i = 0; i < queries.size(); i++) {
+            Thread.sleep(delayMs); // T = 50ms or T = 20ms between each *invocation start*
+
+            int index = i;
+            Query query = queries.get(i);
+            executor.submit(() -> results[index] = runQuery(query, proxy, cache));
+        }
+
+        // All queries have been *started* now, one every T ms - wait here for the
+        // slowest one(s) still in flight to actually finish before writing the file.
+        executor.shutdown();
+        executor.awaitTermination(30, TimeUnit.MINUTES);
 
         List<String> outputLines = new ArrayList<>();
         Map<String, List<Long>> turnaroundByMethod = new LinkedHashMap<>();
         Map<String, List<Long>> executionByMethod = new LinkedHashMap<>();
         Map<String, List<Long>> waitingByMethod = new LinkedHashMap<>();
 
-        // Client cache
-        final int MAX_CACHE_ENTRIES = 45; // task says client max entries is 45
-        Cache<String, Object> cache = clientCacheEnabled ? new Cache<>(MAX_CACHE_ENTRIES, evictionMethod) : null;
-
-        for (Query query : queries) {
-            Thread.sleep(delayMs); // T = 50ms or T = 20ms between each query, picked via args[2]
-
-            // Time the remote call itself -> this is the query's turnaround time.
-            long start = System.currentTimeMillis();
-
-            // One bad line in the input file (e.g. a missing country name - the real
-            // input file has a couple of these) must not take down the other ~3000 queries.
-            // Catch anything that goes wrong for this single query, log it, and move on.
-            try {
-
-                // Make cachekey
-                String key = getCacheKey(query);
-
-                // check client cache
-                Object cachedResult = (cache != null) ? cache.get(key) : null;
-
-                if (cachedResult != null) {
-                    // CACHE HIT, print results
-                    System.out.println("CLIENT CACHE HIT: " + key);
-
-                    long turnaroundTime = System.currentTimeMillis() - start;
-
-                    long executionTime = 0;
-                    long waitingTime = 0;
-
-                    outputLines.add(
-                            cachedResult + " " + query.rawLine
-                            + " (turnaround time: " + turnaroundTime
-                            + " ms, execution time: " + executionTime
-                            + " ms, waiting time: " + waitingTime
-                            + " ms, processed by Server cache)"
-                    );
-
-                    turnaroundByMethod
-                            .computeIfAbsent(query.methodName, k -> new ArrayList<>())
-                            .add(turnaroundTime);
-
-                    executionByMethod
-                            .computeIfAbsent(query.methodName, k -> new ArrayList<>())
-                            .add(executionTime);
-
-                    waitingByMethod
-                            .computeIfAbsent(query.methodName, k -> new ArrayList<>())
-                            .add(waitingTime);
-
-                } else {
-                    // CASHE MISS... continue
-                    // Ask the proxy which server should actually handle this query's zone.
-                    ServerLocation location = proxy.getServerForZone(query.zone);
-
-                    // Simulate the extra distance cost of a neighbor-zone request (0ms if it's
-                    // the same zone - see Proxy.toLocation()). The base 80ms network delay is
-                    // already simulated server-side, inside Server.submitAndWait().
-                    if (location.extraNetworkDelayMs > 0) {
-                        Thread.sleep(location.extraNetworkDelayMs);
-                    }
-
-                    // Connect to whichever server the proxy picked, and make the real call.
-                    // Bound as "Server-Zone-<zone>" - see Server.main().
-                    Registry serverRegistry = LocateRegistry.getRegistry(location.host, location.port);
-                    ServerInterface server = (ServerInterface) serverRegistry.lookup("Server-Zone-" + location.zone);
-                    QueryResult result = invoke(server, query);
-
-                    // cache == null -> skip
-                    if (cache != null) {
-                        // add result to cache
-                        cache.put(key, result.getValue());
-                    }
-
-                    long turnaroundTime = System.currentTimeMillis() - start;
-
-                    // Real waiting/execution time and the actual serving zone come straight from
-                    // the server's own QueryResult now, instead of being hardcoded to 0.
-                    long executionTime = result.getExecutionTimeMs();
-                    long waitingTime = result.getWaitingTimeMs();
-                    int servedByZone = result.getServedByZone();
-
-                    outputLines.add(result.getValue() + " " + query.rawLine
-                            + " (turnaround time: " + turnaroundTime + " ms, execution time: " + executionTime
-                            + " ms, waiting time: " + waitingTime + " ms, processed by Server " + servedByZone + ")");
-
-                    turnaroundByMethod.computeIfAbsent(query.methodName, k -> new ArrayList<>()).add(turnaroundTime);
-                    executionByMethod.computeIfAbsent(query.methodName, k -> new ArrayList<>()).add(executionTime);
-                    waitingByMethod.computeIfAbsent(query.methodName, k -> new ArrayList<>()).add(waitingTime);
-                }
-            } catch (Exception e) {
-                // Still one output line per input line, per the assignment's format - just
-                // marked as an error instead of a real result, and left out of the avg/min/max
-                // stats below since there's no valid timing data for a failed call.
-                //
-                // RMI wraps the real error in layers of RemoteException, and the resulting
-                // message string has embedded newlines - walk down to the root cause and
-                // strip any leftover line breaks, so this is still exactly one output line.
-                Throwable rootCause = e;
-                while (rootCause.getCause() != null) {
-                    rootCause = rootCause.getCause();
-                }
-                String reason = rootCause.getMessage() != null ? rootCause.getMessage() : rootCause.toString();
-                reason = reason.replaceAll("\\s+", " ").trim();
-
-                outputLines.add("ERROR " + query.rawLine + " (" + reason + ")");
-                System.out.println("[CLIENT] -- Query failed, skipping: " + query.rawLine + " -> " + e.getMessage());
+        for (LineResult r : results) {
+            outputLines.add(r.outputLine);
+            if (r.methodName != null) {
+                turnaroundByMethod.computeIfAbsent(r.methodName, k -> new ArrayList<>()).add(r.turnaround);
+                executionByMethod.computeIfAbsent(r.methodName, k -> new ArrayList<>()).add(r.execution);
+                waitingByMethod.computeIfAbsent(r.methodName, k -> new ArrayList<>()).add(r.waiting);
             }
         }
 
@@ -189,6 +158,102 @@ public class Client {
         }
 
         System.out.println("[CLIENT] --> Wrote: " + outputLines.size() + " results to " + outputFile);
+    }
+
+    // Runs exactly one query end-to-end (cache check, RMI call, formatting) and
+    // returns its result row. Called from a worker thread - everything it touches
+    // (the client cache, the RMI stubs) is safe to call concurrently from many
+    // queries at once.
+    private static LineResult runQuery(Query query, ProxyInterface proxy, Cache<String, CachedAnswer> cache) {
+        LineResult r = new LineResult();
+
+        // Time the remote call itself -> this is the query's turnaround time.
+        long start = System.currentTimeMillis();
+
+        // One bad line in the input file (e.g. a missing country name - the real
+        // input file has a couple of these) must not take down the other ~3000 queries.
+        // Catch anything that goes wrong for this single query, log it, and move on.
+        try {
+            String key = getCacheKey(query);
+
+            // check client cache
+            CachedAnswer cached = (cache != null) ? cache.get(key) : null;
+
+            if (cached != null) {
+                // CACHE HIT, print results
+                System.out.println("CLIENT CACHE HIT: " + key);
+
+                long turnaroundTime = System.currentTimeMillis() - start;
+
+                r.methodName = query.methodName;
+                r.turnaround = turnaroundTime;
+                r.execution = 0;
+                r.waiting = 0;
+                // Same output format as a real remote answer - "processed by Server
+                // <server#>", using whichever server originally produced this value.
+                r.outputLine = cached.value + " " + query.rawLine
+                        + " (turnaround time: " + turnaroundTime
+                        + " ms, execution time: 0 ms, waiting time: 0 ms, processed by Server "
+                        + cached.servedByZone + ")";
+                return r;
+            }
+
+            // CACHE MISS... continue
+            // Ask the proxy which server should actually handle this query's zone.
+            ServerLocation location = proxy.getServerForZone(query.zone);
+
+            // Simulate the extra distance cost of a neighbor-zone request (0ms if it's
+            // the same zone - see Proxy.toLocation()). The base 80ms network delay is
+            // already simulated server-side, inside Server.submitAndWait().
+            if (location.extraNetworkDelayMs > 0) {
+                Thread.sleep(location.extraNetworkDelayMs);
+            }
+
+            // Connect to whichever server the proxy picked, and make the real call.
+            // Bound as "Server-Zone-<zone>" - see Server.main().
+            Registry serverRegistry = LocateRegistry.getRegistry(location.host, location.port);
+            ServerInterface server = (ServerInterface) serverRegistry.lookup("Server-Zone-" + location.zone);
+            QueryResult result = invoke(server, query);
+
+            long turnaroundTime = System.currentTimeMillis() - start;
+            long executionTime = result.getExecutionTimeMs();
+            long waitingTime = result.getWaitingTimeMs();
+            int servedByZone = result.getServedByZone();
+
+            // cache == null -> skip
+            if (cache != null) {
+                cache.put(key, new CachedAnswer(result.getValue(), servedByZone));
+            }
+
+            r.methodName = query.methodName;
+            r.turnaround = turnaroundTime;
+            r.execution = executionTime;
+            r.waiting = waitingTime;
+            r.outputLine = result.getValue() + " " + query.rawLine
+                    + " (turnaround time: " + turnaroundTime + " ms, execution time: " + executionTime
+                    + " ms, waiting time: " + waitingTime + " ms, processed by Server " + servedByZone + ")";
+            return r;
+
+        } catch (Exception e) {
+            // Still one output line per input line, per the assignment's format - just
+            // marked as an error instead of a real result, and left out of the avg/min/max
+            // stats below since there's no valid timing data for a failed call.
+            //
+            // RMI wraps the real error in layers of RemoteException, and the resulting
+            // message string has embedded newlines - walk down to the root cause and
+            // strip any leftover line breaks, so this is still exactly one output line.
+            Throwable rootCause = e;
+            while (rootCause.getCause() != null) {
+                rootCause = rootCause.getCause();
+            }
+            String reason = rootCause.getMessage() != null ? rootCause.getMessage() : rootCause.toString();
+            reason = reason.replaceAll("\\s+", " ").trim();
+
+            r.methodName = null; // excluded from stats
+            r.outputLine = "ERROR " + query.rawLine + " (" + reason + ")";
+            System.out.println("[CLIENT] -- Query failed, skipping: " + query.rawLine + " -> " + e.getMessage());
+            return r;
+        }
     }
 
     // The dispatch picks the matching remote method and pulls its arguments out of argTokens.

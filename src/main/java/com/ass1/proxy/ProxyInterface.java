@@ -9,10 +9,11 @@ import java.rmi.RemoteException;
 //      server it should send the real request to.
 public interface ProxyInterface extends Remote {
 
-    // Called by a Server (from Main.java) when it boots up, telling the proxy which
-    // zone it wants to represent. Returns true if the zone was free and got
-    // claimed, false if some other server already grabbed that zone number first.
-    boolean registerServer(String host, int port, int zone) throws RemoteException;
+    // Called by a Server (from Main.java) when it boots up. The Proxy - not the
+    // Server - decides which zone the new server gets, handing out zone numbers
+    // in ascending order as servers register. Returns the assigned zone number,
+    // or -1 if every zone (1..TOTAL_ZONES) is already taken.
+    int registerServer(String host, int port) throws RemoteException;
 
     // Called by the Client once per query line, using the Zone:# from that line in the
     // input file. Returns the host+port of whichever server the client should actually talk to

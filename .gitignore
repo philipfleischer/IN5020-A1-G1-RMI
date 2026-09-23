@@ -24,3 +24,6 @@ bin/
 
 # Logs
 *.log
+
+# Exported Docker image - too big for GitHub (>100MB), upload to Drive/OneDrive instead
+*.tar.gz

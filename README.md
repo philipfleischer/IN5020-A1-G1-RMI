@@ -1,32 +1,12 @@
 # IN5020-A1-G1-RMI
 
-Assignment 1, IN5020 Group 1 - **The Java-RMI International Statistics Service**.
+IN5020: Assignment 1 and Group 1
 
-A distributed statistics service over a dataset of ~140,000 cities: a client sends
-queries through a load-balancing proxy to one of several zone servers, with optional
-server-side and client-side caching. Built with plain Java RMI (no external libraries),
-Maven and Docker.
+**The Java-RMI International Statistics Service**.
 
-See `Assignment1_Group1_Report.docx` for the full design, build, implementation, user guide, screenshots, workload split and test results.
+A distributed statistics service over a dataset of approximately 140,000 cities: a client sends queries through a load-balancing proxy to one of several zone servers, with optional server-side and client-side caching. Built with plain Java RMI (no external libraries), Maven and Docker.
 
-## Structure
-
-```
-pom.xml                          Maven project -> groupId com.ass1 / Java 17
-src/main/java/com/ass1/
-  client/                        Client + input-file query parsing
-  proxy/                         Load-balancing proxy
-  server/                        Zone server, request queue, dataset lookups (Anwar)
-  common/                        Shared cache used by both server and client (Håkon)
-src/test/java/                   Unit tests
-
-data/exercise_1_dataset.csv      Course dataset
-input/exercise_1_input.txt       Course client input file
-docs/assignment/                 Original hand-out: task PDF/DOCX, presentation...
-run_all.sh                       Runs all 10 required test configurations
-plot_graphs.py                   Generates the required graphs from output/
-output/                          Result files, queue logs and graphs from the last run
-```
+See `Assignment1_Group1_Report.pdf` for the full design, build, implementation, user guide, screenshots, workload split and test results.
 
 ## Build & run
 
@@ -36,13 +16,14 @@ mvn clean package
 # 1) Proxy
 java -cp target/solution.jar com.ass1.proxy.Main
 
-# 2) One or more servers - args: port  datasetPath  cacheMode
-#    cacheMode is "none", "FIFO" or "OLDEST". The Proxy assigns each server's
-#    zone number automatically (ascending) as it registers.
+# 2)
+# One or more servers args: port datasetPath cacheMode
+# CacheModes are: "none", "FIFO" or "OLDEST".
+# The Proxy assigns each server's zone number automatically (ascending) as it registers.
 java -cp target/solution.jar com.ass1.server.Server 2000 data/exercise_1_dataset.csv none
 
-# 3) Client - args: mode  evictionMethod  T(ms)  inputFile
-#    mode is "naive", "server_cache" or "client_cache"
+# 3) Client args: mode evictionMethod T(ms) inputFile
+#    modes are: "naive", "server_cache" or "client_cache"
 java -cp target/solution.jar com.ass1.client.Client naive FIFO 50 input/exercise_1_input.txt
 ```
 
@@ -65,10 +46,15 @@ python3 plot_graphs.py
 One image runs every process, the command picks proxy, server or client. Compose starts the proxy and one server per zone (1-5) on a shared network, so containers reach each other by service name.
 
 ```bash
-docker compose build                  # build the shared image once - always do this first,
-                                      # `up -d --build` can race when 6 services share one image
-docker compose up -d                  # starts proxy and one server per zone (1-5)
-docker compose run --rm client        # runs the client once, results land in ./out
+# build the shared image once
+docker compose build
+# Not using `up -d --build`, since it can race when 6 services share one image
+
+# starts proxy and one server per zone (1-5)
+docker compose up -d
+
+# runs the client once, results land in ./out
+docker compose run --rm client
 docker compose down
 ```
 

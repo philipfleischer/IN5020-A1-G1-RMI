@@ -68,9 +68,16 @@ To export the built image for delivery:
 docker save in5020-a1-g1 | gzip > in5020-a1-g1-image.tar.gz
 ```
 
+To load the exported image on another machine (instead of building it locally):
+
+```bash
+docker load -i in5020-a1-g1-image.tar.gz
+docker compose up -d
+```
+
 ## About the output file names
 
-The assignment text names three output files: `naive_server.txt`, `server_cache.txt`and `client_cache.txt`. We test with both T=50 and T=20, and the caching modes with both FIFO and OLDEST eviction, which is 10 combinations, not 3. Three fixed filenames cannot hold 10 different runs without overwriting each other, so we deliberately produce one file per combination instead, with descriptive names (e.g.: `naive_T50.txt`, `server_cache_FIFO_T20.txt`, `client_cache_OLDEST_T50.txt`). All 10 files are in the `/output/` folder.
+The assignment text names three output files: `naive_server.txt`, `server_cache.txt` and `client_cache.txt`. We test with both T=50 and T=20, and the caching modes with both FIFO and OLDEST eviction, which is 10 combinations, not 3. Three fixed filenames cannot hold 10 different runs without overwriting each other, so we deliberately produce one file per combination instead, with descriptive names (e.g.: `naive_T50.txt`, `server_cache_FIFO_T20.txt`, `client_cache_OLDEST_T50.txt`). All 10 files are in the `/output/` folder.
 
 ## Members
 

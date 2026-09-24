@@ -4,7 +4,7 @@ import java.util.Map;
 
 
 public class Cache<K, V> {
-    
+
     private int maxEntries; // max entries is Client=45 | Server=150
     private String method; // choose between methods "FIFO" or "OLDEST"
 
@@ -16,10 +16,12 @@ public class Cache<K, V> {
         this.cache = new LinkedHashMap<>();
     }
 
-    // synchronized: the server side only ever touches this from its one execution
-    // thread, but the client now fires off queries concurrently (see Client.java),
-    // so several threads can call get()/put() on the same client-side cache at once.
-    // Plain LinkedHashMap is not thread-safe under concurrent access.
+    /**
+     * synchronized: the server side only ever touches this from its one execution
+     * thread, but the client now fires off queries concurrently (see Client.java),
+     * so several threads can call get()/put() on the same client-side cache at once.
+     * Plain LinkedHashMap is not thread-safe under concurrent access.
+    **/
     public synchronized V get(K key) {
         CacheEntry<V> entry = cache.get(key);
 

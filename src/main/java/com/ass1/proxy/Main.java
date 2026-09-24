@@ -9,15 +9,17 @@ import java.rmi.registry.Registry;
  **/
 public class Main {
     public static void main(String[] args) throws Exception {
-        // Has to be a different port than the servers (they all sit on 1099), otherwise this
-        // registry would collide with whichever server happens to start first on this machine.
+        /* Has to be a different port than the servers (they all sit on 1099), otherwise this
+            registry would collide with whichever server happens to start first on this machine. */
         int port = 1100;
 
         Proxy proxy = new Proxy();
 
-        // Same idea as server/Main.java: start a fresh registry and bind our object under a
-        // name, so other JVMs (the Servers registering, the Client asking for zones) can look
-        // it up by that name instead of needing to know anything about the Proxy class itself.
+        /**
+         * Start a fresh registry and bind our object under a name, so other JVMs
+         * (the Servers registering, the Client asking for zones) can look it up
+         * by that name instead of needing to know anything about the Proxy class itself.
+        **/
         Registry registry = LocateRegistry.createRegistry(port);
         registry.rebind("ProxyService", proxy);
 

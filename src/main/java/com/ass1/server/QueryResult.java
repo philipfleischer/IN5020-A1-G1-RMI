@@ -7,7 +7,7 @@ import java.io.Serializable;
  * requires (waiting time, execution time, serving zone).
  *
  * Implements Serializable so it travels by value back to the client over
- * RMI - the client gets its own independent copy, not a live reference.
+ * RMI, so the client gets its own independent copy.
  *
  * "value" holds the actual answer: a Long for getPopulationofCountry,
  * an Integer for the other three methods. The client knows which method
@@ -32,17 +32,17 @@ public class QueryResult implements Serializable {
         return value;
     }
 
-    /** Time (ms) the task spent in the queue before execution started. */
+    /* Time (ms) the task spent in the queue before execution started. */
     public long getWaitingTimeMs() {
         return waitingTimeMs;
     }
 
-    /** Time (ms) spent actually computing the answer. */
+    /* Time (ms) spent actually computing the answer. */
     public long getExecutionTimeMs() {
         return executionTimeMs;
     }
 
-    /** Zone number of the server that processed this request. */
+    /* Zone number of the server that processed this request. */
     public int getServedByZone() {
         return servedByZone;
     }

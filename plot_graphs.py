@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """
 Reads every results/*.txt output file and *_queue_log.txt file that run_all.sh
-produced, and draws the two graphs the assignment asks for:
-  1) turnaround time per query, one graph per output file
-  2) queue length over time, one graph per server run
-Run this AFTER run_all.sh has finished. Needs matplotlib: pip install matplotlib
+produces, and draws two graphs:
+  1) turnaround time per query, one graph per output file.
+  2) queue length over time, one graph per server run.
+Run this AFTER run_all.sh has finished.
+Needs matplotlib:
+    pip install matplotlib
 """
 import re
 import glob
@@ -19,8 +21,7 @@ def plot_turnaround(output_file):
     turnarounds = []
     with open(output_file) as f:
         for line in f:
-            # skip the 4 summary lines at the bottom and any failed queries -
-            # neither has a real per-query turnaround number to plot
+            # skip the 4 summary lines at the bottom and any failed queries.
             if line.startswith("ERROR") or "avg turn-around" in line:
                 continue
             match = re.search(r"turnaround time: (\d+) ms", line)
@@ -42,7 +43,7 @@ def plot_turnaround(output_file):
 
 
 def plot_queue_log(log_file):
-    # format is "timestamp,queueSize" per line, written by Server.logQueueLength()
+    # format is "timestamp,queueSize" per line.
     timestamps, sizes = [], []
     with open(log_file) as f:
         for line in f:
@@ -57,19 +58,10 @@ def plot_queue_log(log_file):
         print(f"  (skipped {log_file} - empty)")
         return
 
-    # X-axis as raw unix timestamps is what the assignment literally asks for,
-    # but it's unreadable on a plot - this keeps it relative to when the run
-    # started instead, in seconds, which is the same information but legible.
+    # X-axis as timestamps. Keep it relative to when the run started in seconds.
     start = timestamps[0]
     seconds = [(t - start) / 1000 for t in timestamps]
 
-    # There are thousands of queue-length changes packed into this run (one per
-    # query), way more than there are pixels on a normal-sized plot. Plotted raw,
-    # all those up/down transitions visually merge into one solid filled block
-    # instead of a readable line. Fix: bucket into 1-second windows and keep the
-    # MAX queue length seen in each bucket - using max (not average) means we
-    # still never hide a real spike in the queue, just the redundant detail
-    # between spikes.
     bucketed = {}
     for t, size in zip(seconds, sizes):
         bucket = int(t)

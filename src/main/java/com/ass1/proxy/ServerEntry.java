@@ -11,8 +11,7 @@ class ServerEntry {
     // Only gets refreshed every 18 assignments
     int lastKnownQueueLength;
 
-    // Counts how many times in a row we have handed this server out to a client since the
-    // last refresh. Back to 0 every time we refresh lastKnownQueueLength.
+    // Counts how many times in a row we have handed this server out to a client since the last refresh. Back to 0 every time we refresh lastKnownQueueLength.
     int assignmentsSinceLastRefresh;
 
     ServerEntry(String host, int port, int zone) {

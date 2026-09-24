@@ -10,12 +10,12 @@ import java.util.List;
 /**
  * One line from the input file: <method name> <args...> Zone:#
  * argTokens = raw args, split-by-method happens in Client.
- */
+**/
 public class Query {
     final String rawLine; // Original line
     final String methodName; // The method in the .txt file, e.g. "getPopulationofCountry"
-    final String[] argTokens; // All arguemnts between the methodname and Zone, which can vary
-    final int zone; // e.g.: Zone 4
+    final String[] argTokens; // All arguments between the method name and Zone, which can vary
+    final int zone; // e.g. Zone 4
 
     Query(String rawLine, String methodName, String[] argTokens, int zone) {
         this.rawLine = rawLine;

@@ -11,7 +11,6 @@ import java.util.Map;
 
 /**
  * Parses the CSV dataset and answers the four statistics queries.
- * Plain static functions not tied to caching or threading.
  *
  * Every public query method validates its arguments first and throws
  * IllegalArgumentException on bad input, instead of silently returning
@@ -24,7 +23,7 @@ public class Dataset {
         List<CityRecord> cities = new ArrayList<>(140_600);
 
         try (BufferedReader reader = Files.newBufferedReader(Path.of(csvPath))) {
-            String line = reader.readLine(); // header - skip
+            String line = reader.readLine(); // header, skip
             while ((line = reader.readLine()) != null) {
                 if (line.isBlank()) continue;
                 String[] cols = line.split(";", -1);
@@ -44,7 +43,7 @@ public class Dataset {
         return cities;
     }
 
-    // 2.1.a
+    // RMI Function Call 1
     public static long getPopulationofCountry(List<CityRecord> cities, String countryName) {
         validateCountryName(countryName);
 
@@ -54,10 +53,10 @@ public class Dataset {
                 sum += c.population();
             }
         }
-        return sum; // 0 if the country doesn't exist - not an error, just no match
+        return sum; // 0 if the country doesn't exist, not an error, just no match
     }
 
-    // 2.1.b
+    // RMI Function Call 2
     public static int getNumberofCities(List<CityRecord> cities, String countryName, int threshold, String comp) {
         validateCountryName(countryName);
         validateComp(comp);
@@ -74,7 +73,7 @@ public class Dataset {
         return count;
     }
 
-    // 2.1.c
+    // RMI Function Call 3
     public static int getNumberofCountries(List<CityRecord> cities, int cityCount, int threshold, String comp) {
         validateNonNegative(cityCount, "cityCount");
         validateNonNegative(threshold, "threshold");
@@ -96,7 +95,7 @@ public class Dataset {
         return result;
     }
 
-    // 2.1.d
+    // RMI Function Call 4
     public static int getNumberofCountriesMM(List<CityRecord> cities, int cityCount, int minPopulation, int maxPopulation) {
         validateNonNegative(cityCount, "cityCount");
         validateNonNegative(minPopulation, "minPopulation");

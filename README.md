@@ -6,6 +6,19 @@ IN5020: Assignment 1 and Group 1
 
 A distributed statistics service over a dataset of approximately 140,000 cities: a client sends queries through a load-balancing proxy to one of several zone servers, with optional server-side and client-side caching. Built with plain Java RMI (no external libraries), Maven and Docker.
 
+## System design
+
+![System design: Client -> Proxy -> Server, with optional caches](RMI_SYS_Design.png)
+
+Every box inside the dashed frame runs as its own Docker container (see `docker-compose.yml`).
+
+- **Startup:** each zone server calls `registerServer(...)` on the proxy once, and the proxy hands out zone numbers in ascending order.
+- **1-2. Ask the proxy:** for every query the client calls `getServerForZone(zone)`. The proxy keeps a zone -> server map, checks whether the server in that zone is overloaded and calculates distance to neighbour zones, then returns the chosen server's host, port, zone and simulated network delay.
+- **3. Real RMI call:** the client calls the chosen server directly (e.g. `getPopulationofCountry(...)`). The server puts the request in a FIFO queue drained by a single execution thread, which answers from the dataset (`data/exercise_1_dataset.csv`, ~140,000 cities).
+- **4. Result:** the server returns a `QueryResult` with the answer, the time spent waiting in the queue, the execution time and which zone served it.
+- **Caches (optional, dashed yellow):** in `client_cache` mode the client checks its own cache (max 45 entries) before contacting the proxy at all. In `server_cache` mode the server checks its cache (max 150 entries) before parsing the dataset. Eviction is FIFO or OLDEST.
+- Zones 2-5 are identical copies of zone 1. The client reads 3,166 queries from the input file.
+
 See `Assignment1_Group1_Report.pdf` for the full design, build, implementation, user guide, screenshots, workload split and test results.
 
 ## Build & run
